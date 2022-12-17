@@ -3,6 +3,7 @@ import logging
 from flask import Flask
 from systemdlogging.toolbox import init_systemd_logging
 from .util import parse_bool
+from .api_group import api_group
 
 
 def create_app(test_config=None):
@@ -38,6 +39,8 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
     except OSError:
         pass
+
+    app.register_blueprint(api_group, url_prefix="/api")
 
     # a simple page that says hello
     @app.route('/hello')
