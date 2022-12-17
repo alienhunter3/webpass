@@ -1,19 +1,15 @@
-from flask import Blueprint, render_template, abort
-from jinja2 import TemplateNotFound
+from flask import Blueprint, abort, g, current_app, request
 import json
-from .config import configuration
-from pykeepass import
+from pykeepass import PyKeePass
 
 api_group = Blueprint('api_group', __name__)
-api_prefix = '/api/group'
-
-
-db = PyKeePass()
+api_prefix = '/group'
 
 
 @api_group.before_request
 def before_request_func():
-
+    pw = request.args.get('password')
+    g.db = PyKeePass(current_app.config['DATABASE'], password=pw)
 
 
 @api_group.route(api_prefix + '/')
