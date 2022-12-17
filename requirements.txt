@@ -1,3 +1,4 @@
 flask
 pykeepass
 requests
+systemd-logging
