@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, g, current_app, request, jsonify, make_response
+from flask import Blueprint, g, current_app, request, make_response
 from traceback import format_exc
 from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError

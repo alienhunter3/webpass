@@ -4,6 +4,7 @@ from flask import Flask
 from systemdlogging.toolbox import init_systemd_logging
 from .util import parse_bool
 from .api_group import api_group
+from .api_secret import api_secret
 
 
 def create_app(test_config=None):
@@ -41,6 +42,7 @@ def create_app(test_config=None):
         pass
 
     app.register_blueprint(api_group, url_prefix="/api")
+    app.register_blueprint(api_secret, url_prefix="/api")
 
     # a simple page that says hello
     @app.route('/hello')
