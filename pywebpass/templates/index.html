@@ -11,16 +11,15 @@
 <body>
     <div id="center">
         <div id="menu">
-            <a href="">groups</a> | <a href="">all secrets</a> | <a href="">login</a> |  <a href="">logout</a>
+            <a href="#" onclick="forefront('groups');">groups</a> | <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a>
             <hr/>
         </div>
         <div id="search">
-            <form id="login_form" action="">
+            <form id="search_form" >
 
                 <label for="search_bar"><b>Search</b></label>
-                <input type="text"  name="search_bar" required>
-                <button type="submit">Submit</button>
-
+                <input id="search_input" type="text"  name="search_bar" required>
+                <button type="submit" onclick="searchSecretClick()">Submit</button>
             </form>
             <hr/>
             <br/>
@@ -29,22 +28,35 @@
         <div id="content">
             <div id="login">
                  <h2>LOGIN</h2>
-                 <form id="login_form" action="">
+                 <form id="login_form">
                       <div class="container">
 
-                        <label for="psw"><b>Password</b></label>
-                        <input type="password" placeholder="Enter Password" name="psw" required>
+                        <label ><b>Password</b></label>
+                        <input id="pw_field" type="password" placeholder="Enter Password" required>
 
-                        <button type="submit">Login</button>
+                        <button onclick="logIn()" type="submit">Login</button>
                       </div>
                  </form>
             </div>
             <div hidden id="groups">
                 <h2>Groups</h2>
+                <ul id="group_ul">
+                    <li>empty</li>
+                </ul>
             </div>
             <div hidden id="secret_list">
+                <h2>Secrets</h2>
+                <table id="secret_table">
+                    <tr>
+                        <th>Title</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                    </tr>
+                </table>
             </div>
             <div hidden id="secret">
+                <h2>Secret</h2>
+                <div id="secret_content"></div>
             </div>
         </div>
     </div>

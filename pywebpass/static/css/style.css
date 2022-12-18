@@ -18,3 +18,22 @@ body {
 #menu{
     text-align: center;
 }
+
+ul {
+    display: inline-block;
+    text-align: left;
+}
+
+table, th, td {
+    border: 1px solid;
+}
+
+table {
+    border-collapse: collapse;
+    margin: 0 auto;
+}
+
+th, td {
+  text-align: left;
+}
+
