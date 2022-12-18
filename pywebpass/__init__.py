@@ -41,10 +41,13 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
     except OSError:
         pass
-
-    app.register_blueprint(api_group, url_prefix="/api")
-    app.register_blueprint(api_secret, url_prefix="/api")
-    app.register_blueprint(ui_page)
+    if 'APP_PATH' in os.environ:
+        app_prefix = os.environ.get('APP_PATH')
+    else:
+        app_prefix = ''
+    app.register_blueprint(api_group, url_prefix=app_prefix + "/api")
+    app.register_blueprint(api_secret, url_prefix=app_prefix + "/api")
+    app.register_blueprint(ui_page, url_prefix=app_prefix)
 
     # a simple page that says hello
     @app.route('/test')
