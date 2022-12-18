@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>Password DB</title>
+    <meta name="description" content="PASSWORD DB">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/webpass.js') }}"></script>
+</head>
+<body>
+    <div id="center">
+        <div id="menu">
+            <a href="">groups</a> | <a href="">all secrets</a> | <a href="">login</a> |  <a href="">logout</a>
+            <hr/>
+        </div>
+        <div id="search">
+            <form id="login_form" action="">
+
+                <label for="search_bar"><b>Search</b></label>
+                <input type="text"  name="search_bar" required>
+                <button type="submit">Submit</button>
+
+            </form>
+            <hr/>
+            <br/>
+            <br/>
+        </div>
+        <div id="content">
+            <div id="login">
+                 <h2>LOGIN</h2>
+                 <form id="login_form" action="">
+                      <div class="container">
+
+                        <label for="psw"><b>Password</b></label>
+                        <input type="password" placeholder="Enter Password" name="psw" required>
+
+                        <button type="submit">Login</button>
+                      </div>
+                 </form>
+            </div>
+            <div hidden id="groups">
+                <h2>Groups</h2>
+            </div>
+            <div hidden id="secret_list">
+            </div>
+            <div hidden id="secret">
+            </div>
+        </div>
+    </div>
+</body>
+</html>
