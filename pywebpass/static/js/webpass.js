@@ -5,7 +5,7 @@ var current_secret = null;
 const api_base = window.location + '/api'
 const api_group = api_base + '/group'
 const api_secret = api_base + '/secret'
-const divIds = ['login', 'groups', 'secret', 'secret_list']
+const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading']
 function loggedIn(){
     if (pw == ""){
         return false;
@@ -123,6 +123,7 @@ function logIn(){
 
     XMLReq.open("GET", api_group, true);
     XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    forefront('loading');
     XMLReq.send(null);
 }
 
@@ -134,6 +135,7 @@ function getGroupSecrets(uuid){
                 var data = JSON.parse(this.responseText);
                 secrets = data.data;
                 setSecretList();
+                forefront('secret_list');
             }
             else if(this.status == 401){
                 alert('Authentication failed. Incorrect password.');
@@ -155,9 +157,9 @@ function groupClick(uuid){
         logOut();
     }
     else{
+        forefront('loading');
         clearSecretList();
         getGroupSecrets(uuid);
-        forefront('secret_list');
     }
 }
 
@@ -193,6 +195,7 @@ function getSearchSecrets(needle){
                 var data = JSON.parse(this.responseText);
                 secrets = data.data;
                 setSecretList();
+                forefront('secret_list');
             }
             else if(this.status == 401){
                 alert('Authentication failed. Incorrect password.');
@@ -217,9 +220,9 @@ function searchSecretClick(){
     var needle = searchBar.value;
     searchBar.value = '';
     secrets = [];
+    forefront('loading');
     clearSecretList();
     getSearchSecrets(needle);
-    forefront('secret_list');
 }
 
 function getAllSecrets(){
@@ -230,6 +233,7 @@ function getAllSecrets(){
                 var data = JSON.parse(this.responseText);
                 secrets = data.data;
                 setSecretList();
+                forefront('secret_list');
             }
             else if(this.status == 401){
                 alert('Authentication failed. Incorrect password.');
@@ -251,11 +255,58 @@ function allSecretClick(){
         return;
     }
     secrets = [];
+    forefront('loading');
     clearSecretList();
     getAllSecrets();
-    forefront('secret_list');
+}
+
+function setSecretDisplay(){
+    clearSecret();
+    var elem = document.getElementById('secret_content');
+    var tab = document.createElement("table");
+    for (pair of Object.entries(current_secret)){
+        if (pair[0] == "attachments"){
+            continue;
+        }
+        var row = document.createElement("tr");
+        var field = document.createElement("td");
+        field.innerHTML = pair[0];
+        row.appendChild(field);
+        var value = document.createElement("td");
+        value.innerHTML = pair[1];
+        row.appendChild(value);
+        tab.appendChild(row);
+    }
+    elem.appendChild(tab);
+}
+
+function getSecret(uuid){
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 200){
+                var data = JSON.parse(this.responseText);
+                current_secret = data.data;
+                setSecretDisplay();
+                forefront('secret');
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+            }
+            else{
+                alert('Error retrieving search secrets.');
+            }
+        }
+    };
+
+    XMLReq.open("GET", api_secret + '/' + uuid, true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    XMLReq.send(null);
 }
 
 function secretClick(uuid){
-
+    forefront('loading');
+    current_secret = null;
+    clearSecret();
+    getSecret(uuid);
 }
