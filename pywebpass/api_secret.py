@@ -4,6 +4,7 @@ from traceback import format_exc
 from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
 from uuid import UUID
+from werkzeug.exceptions import BadRequest
 
 api_secret = Blueprint('api_secret', __name__)
 api_prefix = '/secret'
@@ -52,6 +53,30 @@ def root_secrets():
     else:
         data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in all_secrets]
         return make_response({'msg': 'ok', 'data': data}, 200)
+
+
+@api_secret.route(api_prefix, methods=['POST'])
+def post_secret():
+    group = ''
+    username = ''
+    password = ''
+    url = ''
+    notes = ''
+    if request.content_type in ['application/json']:
+        try:
+            json_data = request.get_json()
+            if type(json_data) is not dict:
+                return make_response({'msg': 'invalid JSON structure'}, 400)
+        except BadRequest as e:
+            return make_response({'msg': 'cannot parse JSON payload'}, 400)
+
+        if 'title' not in request.json:
+            return make_response({'msg': 'new secret must have a title'}, 400)
+
+    else:
+        pass
+
+    entry = g.db.add_entry(group, title, username, password, url=url, notes=notes)
 
 
 @api_secret.route(api_prefix + '/<string:uuid>')
