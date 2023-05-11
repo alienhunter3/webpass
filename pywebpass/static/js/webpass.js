@@ -5,7 +5,7 @@ var current_secret = null;
 const api_base = window.location + '/api'
 const api_group = api_base + '/group'
 const api_secret = api_base + '/secret'
-const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading']
+const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit']
 function loggedIn(){
     if (pw == ""){
         return false;
@@ -149,6 +149,70 @@ function getGroupSecrets(uuid){
     XMLReq.open("GET", api_group + '/' + uuid + '/secrets', true);
     XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
     XMLReq.send(null);
+}
+
+function createSecretClick(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+    var egf = document.getElementById('edit_group_field');
+    egf.innerHTML = "<option disabled selected value> -- select a group -- </option>"
+    for (i in groups){
+        gName = groups[i].name;
+        gUuid = groups[i].uuid;
+        var tmpGroup = document.createElement("option");
+        tmpGroup.value = gUuid;
+        tmpGroup.innerHTML = gName;
+        egf.appendChild(tmpGroup);
+    }
+
+    var resetFields = ["edit_title_field", "edit_username_field", "edit_pw_field", "edit_url_field", "edit_notes_field"];
+    for (i in resetFields){
+        var tmp = document.getElementById(resetFields[i]);
+        tmp.value = "";
+    }
+    var editButton = document.getElementById("edit_button");
+    editButton.removeAttribute("onclick");
+    editButton.onclick = createSecretPost;
+    forefront('edit');
+}
+
+function createSecretPost(){
+    var title = document.getElementById('edit_title_field').value;
+    var username = document.getElementById('edit_username_field').value;
+    var password = document.getElementById('edit_pw_field').value;
+    var url = document.getElementById('edit_url_field').value;
+    var notes = document.getElementById('edit_notes_field').value;
+    var group = document.getElementById('edit_group_field').value;
+    var data = {'title': title, 'username': username, 'password': password, 'url': url, 'notes': notes, 'group': group};
+    var body = JSON.stringify(data);
+
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 201){
+                var data = JSON.parse(this.responseText);
+                secretUuid = data.secret;
+                getSecret(secretUuid);
+            }
+            else if(this.status == 400){
+                alert('Could not create new secret because of invalid secret values.');
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+            }
+            else{
+                alert('Error creating secret.');
+            }
+        }
+    };
+
+    XMLReq.open("POST", api_secret , true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    XMLReq.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+    XMLReq.send(body);
+
 }
 
 function groupClick(uuid){

@@ -11,7 +11,7 @@
 <body>
     <div id="center">
         <div id="menu">
-            <a href="#" onclick="forefront('groups');">groups</a> | <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a>
+            <a href="#" onclick="forefront('groups');">groups</a> | <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a> | <a href="#" onclick="createSecretClick()" >new secret</a>
             <hr/>
         </div>
         <div id="search">
@@ -37,6 +37,42 @@
                         <button onclick="logIn()" type="submit">Login</button>
                       </div>
                  </form>
+            </div>
+            <div hidden id="edit">
+             <h3>Secret Details</h3>
+             <form id="edit_form">
+                <table>
+                    <tr id="group_row">
+                        <td><label><b>Group</b></label></td>
+                        <td>
+                            <select id="edit_group_field" name="group" >
+                                <option disabled selected value> -- select a group -- </option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><label><b>Title</b></label></td>
+                        <td><input id="edit_title_field" type="text" value="" size="29"></td>
+                    </tr>
+                    <tr>
+                        <td><label><b>Username</b></label></td>
+                        <td><input id="edit_username_field" type="text" value="" size="29"></td>
+                    </tr>
+                    <tr>
+                        <td><label><b>Password</b></label></td>
+                        <td><input id="edit_pw_field" type="text" value="" size="29"></td>
+                    </tr>
+                    <tr>
+                        <td><label><b>URL</b></label></td>
+                        <td><input id="edit_url_field" type="text" value="" size="29"></td>
+                    </tr>
+                    <tr>
+                        <td><label><b>Notes</b></label></td>
+                        <td><textarea id="edit_notes_field" rows="10" cols="30"></textarea></td>
+                    </tr>
+                </table>
+                <button id="edit_button" type="button">Submit</button>
+             </form>
             </div>
             <div hidden id="groups">
                 <h2>Groups</h2>

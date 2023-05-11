@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, g, current_app, request, make_response, send_file
 from io import BytesIO
 from traceback import format_exc
@@ -59,15 +61,18 @@ def root_secrets():
 @api_secret.route(api_prefix, methods=['POST'])
 def post_secret():
     json_data = {}
-    if request.content_type in ['application/json']:
+    if str(request.content_type).find('json') != -1:
         try:
             json_data = request.get_json()
             if type(json_data) is not dict:
+                current_app.logger.error("Invalid JSON structure.")
                 return make_response({'msg': 'invalid JSON structure'}, 400)
         except BadRequest as e:
+            current_app.logger.error("Cannot parse json payload.")
             return make_response({'msg': 'cannot parse JSON payload'}, 400)
 
     else:
+        logging.error(f"Msg not application/json, received '{request.content_type}'")
         return make_response({'msg': 'currently only "application/json" supported'}, 400)
 
     group = find_group(g.db, json_data.get('group', ''))
@@ -77,6 +82,7 @@ def post_secret():
     url = json_data.get('url', '')
     notes = json_data.get('notes', '')
     if len(g.db.find_entries_by_title(title, group=group)) > 0:
+        logging.error(f'Group already contains entry with title "{title}"')
         return make_response({'msg': f'Group already contains entry with title "{title}"'}, 400)
     try:
         entry = g.db.add_entry(group, title, username, password, url=url, notes=notes)
@@ -113,7 +119,7 @@ def secret_details(uuid: str):
     for a in secret.attachments:
         attachments.append({'id': a.id, 'file_name': a.filename})
     data = {'name': secret.title, 'path': f"/{'/'.join(secret.path)}", 'uuid': secret.uuid, 'notes': secret.notes,
-            'attachments': attachments, 'password': secret.password, 'url': secret.url}
+            'attachments': attachments, 'username': secret.username, 'password': secret.password, 'url': secret.url}
     for key in secret.custom_properties.keys():
         var = key
         val = secret.custom_properties[var]
@@ -158,7 +164,7 @@ def secret_update(uuid: str):
                 secret.__setattr__(prop, new_val)
     try:
         g.db.save()
-        return make_response({'msg': 'ok', 'secret': f'{str(secret.uuid)}'}, 201)
+        return make_response({'msg': 'ok', 'secret': f'{str(secret.uuid)}'}, 200)
     except:
         return make_response({'msg': "Couldn't save changes to database due to unknown error."}, 500)
 
