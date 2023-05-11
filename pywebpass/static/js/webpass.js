@@ -277,7 +277,18 @@ function setSecretDisplay(){
         row.appendChild(value);
         tab.appendChild(row);
     }
+
+   var attHeader = document.createElement("h3");
+   attHeader.innerHTML = 'Attachments:';
+   var attList = document.createElement("ul");
+   for (i in current_secret.attachments){
+     newLi = document.createElement("li");
+     newLi.innerHTML = current_secret.attachments[i].file_name;
+     attList.appendChild(newLi);
+   }
     elem.appendChild(tab);
+    elem.appendChild(attHeader);
+    elem.appendChild(attList);
 }
 
 function getSecret(uuid){

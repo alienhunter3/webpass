@@ -1,4 +1,6 @@
-flask
-pykeepass
+flask~=2.3.2
+pykeepass~=4.0.3
 requests
 systemd-logging
+setuptools~=65.5.1
+Werkzeug~=2.3.4

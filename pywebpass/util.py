@@ -3,6 +3,7 @@ import os.path
 from configparser import ConfigParser
 import logging
 from systemdlogging.toolbox import init_systemd_logging
+from uuid import UUID
 
 
 def parse_log_level(level: str) -> int:
@@ -83,3 +84,11 @@ def setup():
         raise FileNotFoundError(f"Could not find db file at '{db_file}'.")
 
     configuration = c
+
+
+def is_uuid(val: str) -> bool:
+    try:
+        temp = UUID(val.strip())
+    except ValueError as e:
+        return False
+    return True

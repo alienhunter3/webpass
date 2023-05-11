@@ -5,6 +5,7 @@ from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
 from uuid import UUID
 from werkzeug.exceptions import BadRequest
+from .keepass import find_group
 
 api_secret = Blueprint('api_secret', __name__)
 api_prefix = '/secret'
@@ -24,7 +25,7 @@ def before_request_func():
         return make_response({'msg': 'unexpected server error'}, 500)
 
 
-@api_secret.route(api_prefix)
+@api_secret.route(api_prefix, methods=['GET'])
 def root_secrets():
     all_secrets = g.db.entries
     if 'search' in request.args:
@@ -57,11 +58,7 @@ def root_secrets():
 
 @api_secret.route(api_prefix, methods=['POST'])
 def post_secret():
-    group = ''
-    username = ''
-    password = ''
-    url = ''
-    notes = ''
+    json_data = {}
     if request.content_type in ['application/json']:
         try:
             json_data = request.get_json()
@@ -70,16 +67,40 @@ def post_secret():
         except BadRequest as e:
             return make_response({'msg': 'cannot parse JSON payload'}, 400)
 
-        if 'title' not in request.json:
-            return make_response({'msg': 'new secret must have a title'}, 400)
-
     else:
-        pass
+        return make_response({'msg': 'currently only "application/json" supported'}, 400)
 
-    entry = g.db.add_entry(group, title, username, password, url=url, notes=notes)
+    group = find_group(g.db, json_data.get('group', ''))
+    title = json_data.get('title', '')
+    username = json_data.get('username', '')
+    password = json_data.get('password', '')
+    url = json_data.get('url', '')
+    notes = json_data.get('notes', '')
+    if len(g.db.find_entries_by_title(title, group=group)) > 0:
+        return make_response({'msg': f'Group already contains entry with title "{title}"'}, 400)
+    try:
+        entry = g.db.add_entry(group, title, username, password, url=url, notes=notes)
+    except:
+        return make_response({'msg': "Couldn't create new secret due to an unknown error."}, 500)
+
+    if 'extra' in json_data:
+        props = json_data['extra']
+        if type(props) is dict:
+            for key in props.keys():
+                key = key.strip()
+                if key.lower() in ['title', 'url', 'notes', 'password', 'username', 'group']:
+                    continue
+                val = props[key]
+                entry.set_custom_property(key, str(val))
+
+    try:
+        g.db.save()
+        return make_response({'msg': 'ok', 'secret': f'{str(entry.uuid)}'}, 201)
+    except:
+        return make_response({'msg': "Couldn't save changes to database due to unknown error."}, 500)
 
 
-@api_secret.route(api_prefix + '/<string:uuid>')
+@api_secret.route(api_prefix + '/<string:uuid>', methods=['GET'])
 def secret_details(uuid: str):
     try:
         uuid_obj = UUID(uuid)
@@ -92,8 +113,54 @@ def secret_details(uuid: str):
     for a in secret.attachments:
         attachments.append({'id': a.id, 'file_name': a.filename})
     data = {'name': secret.title, 'path': f"/{'/'.join(secret.path)}", 'uuid': secret.uuid, 'notes': secret.notes,
-            'attachments': attachments, 'password': secret.password}
+            'attachments': attachments, 'password': secret.password, 'url': secret.url}
+    for key in secret.custom_properties.keys():
+        var = key
+        val = secret.custom_properties[var]
+        if var in data:
+            var = 'custom_'+var
+        data[var] = val
     return make_response({'msg': 'ok', 'data': data}, 200)
+
+
+@api_secret.route(api_prefix + '/<string:uuid>', methods=['PUT'])
+def secret_update(uuid: str):
+    try:
+        uuid_obj = UUID(uuid)
+    except ValueError as e:
+        return make_response({'msg': 'incorrectly formatted uuid value'}, 400)
+    secret = g.db.find_entries_by_uuid(uuid_obj, first=True)
+    if secret is None:
+        return make_response({'msg': 'secret not found'}, 404)
+
+    json_data = {}
+    if request.content_type in ['application/json']:
+        try:
+            json_data = request.get_json()
+            if type(json_data) is not dict:
+                return make_response({'msg': 'invalid JSON structure'}, 400)
+        except BadRequest as e:
+            return make_response({'msg': 'cannot parse JSON payload'}, 400)
+    else:
+        return make_response({'msg': 'currently only "application/json" supported'}, 400)
+
+    if 'title' in json_data:
+        title = json_data['title'].strip()
+        if title != secret.title:
+            group = secret.group
+            if len(g.db.find_entries_by_title(title, group=group)) > 0:
+                return make_response({'msg': f'Group already contains entry with title "{title}"'}, 400)
+            secret.title = title
+    for prop in ('username', 'password', 'url', 'notes'):
+        if prop in json_data:
+            new_val = json_data[prop].strip()
+            if new_val != secret.__getattribute__(prop):
+                secret.__setattr__(prop, new_val)
+    try:
+        g.db.save()
+        return make_response({'msg': 'ok', 'secret': f'{str(secret.uuid)}'}, 201)
+    except:
+        return make_response({'msg': "Couldn't save changes to database due to unknown error."}, 500)
 
 
 @api_secret.route(api_prefix + '/<string:uuid>/attachment/<int:attachment_id>')
