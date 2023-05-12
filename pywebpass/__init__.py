@@ -48,7 +48,7 @@ def create_app(test_config=None):
         app_prefix = ''
     app.register_blueprint(api_group, url_prefix=app_prefix + "/api")
     app.register_blueprint(api_secret, url_prefix=app_prefix + "/api")
-    app.register_blueprint(api_datafile, url_prefix="/api")
+    app.register_blueprint(api_datafile, url_prefix=app_prefix + "/api")
     app.register_blueprint(ui_page, url_prefix=app_prefix)
 
     # a simple page that says hello
