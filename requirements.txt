@@ -4,4 +4,3 @@ requests
 systemd-logging
 setuptools
 Werkzeug
-wsgi

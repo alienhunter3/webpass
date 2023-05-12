@@ -10,6 +10,5 @@ setup(
         'pykeepass',
         'requests',
         'systemd-logging',
-        'wsgi',
     ],
 )
