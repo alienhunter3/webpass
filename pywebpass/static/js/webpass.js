@@ -404,8 +404,16 @@ function setSecretDisplay(){
         var field = document.createElement("td");
         field.innerHTML = pair[0];
         row.appendChild(field);
-        var value = document.createElement("td");
-        value.innerHTML = pair[1];
+        if (pair[0] == "notes"){
+            var value = document.createElement("td");
+            var pre = document.createElement("pre");
+            pre.innerText = pair[1];
+            value.appendChild(pre);
+        }
+        else{
+            var value = document.createElement("td");
+            value.innerHTML = pair[1];
+        }
         row.appendChild(value);
         tab.appendChild(row);
     }
