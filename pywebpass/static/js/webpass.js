@@ -2,10 +2,12 @@ var pw = "";
 var groups = [];
 var secrets = [];
 var current_secret = null;
-const api_base = window.location + '/api'
-const api_group = api_base + '/group'
-const api_secret = api_base + '/secret'
-const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit']
+var db_details = null;
+const api_base = window.location + 'api';
+const api_group = api_base + '/group';
+const api_secret = api_base + '/secret';
+const api_db = api_base + '/file';
+const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit', 'database', 'upload'];
 function loggedIn(){
     if (pw == ""){
         return false;
@@ -93,10 +95,13 @@ function logOut(){
     secrets = [];
     current_secret = null;
     pw = '';
+    db_details = null;
     clearSecretList();
     clearGroupList();
     clearSecret();
     forefront('login');
+    var upass = document.getElementById("db_upload_pw");
+    upass.value = "";
 }
 
 function logIn(){
@@ -176,6 +181,69 @@ function createSecretClick(){
     editButton.removeAttribute("onclick");
     editButton.onclick = createSecretPost;
     forefront('edit');
+}
+
+function updateSecretClick(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+
+    if (current_secret === null){
+        alert("No secret currently selected.")
+    }
+
+    var egf = document.getElementById('edit_group_field');
+    egf.innerHTML = "<option disabled selected value> -- select a group -- </option>"
+
+    document.getElementById("edit_title_field").value = current_secret.name
+    document.getElementById("edit_notes_field").value = current_secret.notes
+    document.getElementById("edit_pw_field").value = current_secret.password
+    document.getElementById("edit_url_field").value = current_secret.url
+    document.getElementById("edit_username_field").value = current_secret.username
+    document.getElementById("edit_uuid_field").value = current_secret.uuid
+
+    var editButton = document.getElementById("edit_button");
+    editButton.removeAttribute("onclick");
+    editButton.onclick = updateSecretPut;
+    forefront('edit');
+}
+
+function updateSecretPut(){
+    var title = document.getElementById('edit_title_field').value;
+    var username = document.getElementById('edit_username_field').value;
+    var password = document.getElementById('edit_pw_field').value;
+    var url = document.getElementById('edit_url_field').value;
+    var notes = document.getElementById('edit_notes_field').value;
+    var uuid = document.getElementById('edit_uuid_field').value;
+    var data = {'title': title, 'username': username, 'password': password, 'url': url, 'notes': notes};
+    var body = JSON.stringify(data);
+
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 200){
+                var data = JSON.parse(this.responseText);
+                secretUuid = data.secret;
+                getSecret(secretUuid);
+            }
+            else if(this.status == 400){
+                alert('Could not update secret because of invalid secret values.');
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+            }
+            else{
+                alert('Error updating secret.');
+            }
+        }
+    };
+
+    XMLReq.open("PUT", api_secret + '/' + uuid , true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    XMLReq.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+    XMLReq.send(body);
+
 }
 
 function createSecretPost(){
@@ -346,8 +414,14 @@ function setSecretDisplay(){
    attHeader.innerHTML = 'Attachments:';
    var attList = document.createElement("ul");
    for (i in current_secret.attachments){
-     newLi = document.createElement("li");
-     newLi.innerHTML = current_secret.attachments[i].file_name;
+     var newLi = document.createElement("li");
+     var liAnchor = document.createElement("a");
+     liAnchor.innerText = current_secret.attachments[i].file_name;
+     liAnchor.addEventListener('click', function(){
+        downloadAttachment(current_secret.attachments[i].id);
+     });
+     liAnchor.href = "#";
+     newLi.append(liAnchor);
      attList.appendChild(newLi);
    }
     elem.appendChild(tab);
@@ -384,4 +458,136 @@ function secretClick(uuid){
     current_secret = null;
     clearSecret();
     getSecret(uuid);
+}
+
+function downloadAttachment(aid) {
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+
+    if (current_secret === null){
+        alert("No secret currently selected.")
+    }
+
+  request = new XMLHttpRequest();
+  request.responseType = "blob";
+  request.open("GET", api_secret + '/' + current_secret.uuid + "/attachment/" + aid , true);
+  request.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+  request.send();
+
+  request.onreadystatechange = function () {
+    if (this.readyState == 4 && this.status == 200) {
+      var cdh = this.getResponseHeader('content-disposition');
+      var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+      var matches = filenameRegex.exec(cdh);
+      const attURL = window.URL.createObjectURL(this.response);
+      const anchor = document.createElement("a");
+      anchor.href = attURL;
+      anchor.download = matches[1];
+      document.body.appendChild(anchor);
+      anchor.click();
+    }
+  };
+}
+
+function downloadDBFile(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+
+  request = new XMLHttpRequest();
+  request.responseType = "blob";
+  request.open("GET", api_db , true);
+  request.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+  request.send();
+
+  request.onreadystatechange = function () {
+    if (this.readyState == 4 && this.status == 200) {
+      var cdh = this.getResponseHeader('content-disposition');
+      var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+      var matches = filenameRegex.exec(cdh);
+      const attURL = window.URL.createObjectURL(this.response);
+      const anchor = document.createElement("a");
+      anchor.href = attURL;
+      anchor.download = matches[1];
+      document.body.appendChild(anchor);
+      anchor.click();
+    }
+  };
+}
+
+function setDatabaseDisplay(){
+    var tab = document.getElementById("database_details");
+    tab.innerHTML = "";
+    for (pair of Object.entries(database_details)){
+        var row = document.createElement("tr");
+        var field = document.createElement("td");
+        field.innerHTML = pair[0];
+        row.appendChild(field);
+        var value = document.createElement("td");
+        value.innerHTML = pair[1];
+        row.appendChild(value);
+        tab.appendChild(row);
+    }
+    var row = document.createElement("tr");
+    var field = document.createElement("td");
+    var downAnchor = document.createElement("a");
+    downAnchor.href = "#";
+    downAnchor.innerHTML = "Download DB";
+    downAnchor.addEventListener('click', function(){
+        downloadDBFile();
+    });
+    field.appendChild(downAnchor);
+    row.appendChild(field);
+    var value = document.createElement("td");
+    var upAnchor = document.createElement("a");
+    upAnchor.href = "#";
+    upAnchor.innerHTML ="Upload New DB";
+    upAnchor.addEventListener('click', function(){
+        showDatabaseUploadForm();
+    });
+    value.appendChild(upAnchor);
+    row.appendChild(value);
+    tab.appendChild(row);
+}
+
+function getDatabaseDetails(){
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 200){
+                var data = JSON.parse(this.responseText);
+                database_details = data.details;
+                setDatabaseDisplay();
+                forefront('database');
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+            }
+            else{
+                alert('Error retrieving database details.');
+            }
+        }
+    };
+
+    XMLReq.open("GET", api_db + '/details', true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    XMLReq.send(null);
+}
+
+function showDatabaseClick(){
+    forefront('loading');
+    database_details = 'null';
+    getDatabaseDetails();
+}
+
+function showDatabaseUploadForm(){
+    forefront('loading');
+    var upForm = document.getElementById("db_upload_form");
+    upForm.action = api_db;
+    var upass = document.getElementById("db_upload_pw");
+    upass.value = pw;
+    forefront('upload');
 }

@@ -11,7 +11,10 @@
 <body>
     <div id="center">
         <div id="menu">
-            <a href="#" onclick="forefront('groups');">groups</a> | <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a> | <a href="#" onclick="createSecretClick()" >new secret</a>
+            <a href="#" onclick="forefront('groups');">groups</a> |
+            <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a> |
+            <a href="#" onclick="createSecretClick()" >new secret</a> |
+            <a href="#" onclick="showDatabaseClick()">database file</a>
             <hr/>
         </div>
         <div id="search">
@@ -71,6 +74,7 @@
                         <td><textarea id="edit_notes_field" rows="10" cols="30"></textarea></td>
                     </tr>
                 </table>
+                <input type="hidden" id="edit_uuid_field" value="">
                 <button id="edit_button" type="button">Submit</button>
              </form>
             </div>
@@ -91,9 +95,24 @@
                 </table>
             </div>
             <div hidden id="secret">
-                <h2>Secret</h2>
+                <h2>Secret (<a href="#" onclick="updateSecretClick()">update</a>)</h2>
                 <div id="secret_content">
                 </div>
+            </div>
+            <div hidden id="database">
+                <h2>Database File</h2>
+                <table id="database_details">
+
+                </table>
+            </div>
+            <div hidden id="upload">
+                <h2>Update Database File</h2>
+                <form method="post" enctype="multipart/form-data" id="db_upload_form">
+                  Select db file upload:
+                  <input type="file" name="db_upload" id="db_upload">
+                  <input type="hidden" name="password" id="db_upload_pw" value="">
+                  <input type="submit" value="Upload KeePass DB" name="submit">
+                </form>
             </div>
             <div hidden id="loading">
                 <h2>Loading. Please wait.</h2>

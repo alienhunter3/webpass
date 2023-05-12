@@ -140,7 +140,7 @@ def secret_update(uuid: str):
         return make_response({'msg': 'secret not found'}, 404)
 
     json_data = {}
-    if request.content_type in ['application/json']:
+    if str(request.content_type).find('json') != -1:
         try:
             json_data = request.get_json()
             if type(json_data) is not dict:
