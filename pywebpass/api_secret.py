@@ -30,32 +30,53 @@ def before_request_func():
 @api_secret.route(api_prefix, methods=['GET'])
 def root_secrets():
     all_secrets = g.db.entries
+    fetch_all_details = False
+    secret_set = []
+    if 'fetch_all' in request.args:
+        if request.args['fetch_all'].strip().lower() in ['y', 'yes', 'true', '1']:
+            fetch_all_details = True
     if 'search' in request.args:
         term = request.args.get('search').strip().lower()
         if term == '':
-            data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in all_secrets]
-            return make_response({'msg': 'ok', 'data': data}, 200)
-        secrets = []
-        for s in all_secrets:
-            if type(s.title) is str and term in s.title.lower():
-                secrets.append(s)
-                continue
-            if type(s.username) is str and term in s.username.lower():
-                secrets.append(s)
-                continue
-            if type(s.notes) is str and term in s.notes.lower():
-                secrets.append(s)
-                continue
-            for a in s.attachments:
-                if term in a.filename.lower():
-                    secrets.append(s)
-                    break
-        data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in secrets]
-        return make_response({'msg': 'ok', 'data': data}, 200)
-
+            secret_set = all_secrets
+        else:
+            for s in all_secrets:
+                if type(s.title) is str and term in s.title.lower():
+                    secret_set.append(s)
+                    continue
+                if type(s.username) is str and term in s.username.lower():
+                    secret_set.append(s)
+                    continue
+                if type(s.notes) is str and term in s.notes.lower():
+                    secret_set.append(s)
+                    continue
+                for a in s.attachments:
+                    if term in a.filename.lower():
+                        secret_set.append(s)
+                        break
     else:
-        data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in all_secrets]
-        return make_response({'msg': 'ok', 'data': data}, 200)
+        secret_set = all_secrets
+
+    if fetch_all_details:
+        return_data = []
+        for secret in secret_set:
+            attachments = []
+            for a in secret.attachments:
+                attachments.append({'id': a.id, 'file_name': a.filename})
+            data = {'name': secret.title, 'path': f"/{'/'.join(secret.path)}", 'uuid': secret.uuid,
+                    'notes': secret.notes,
+                    'attachments': attachments, 'username': secret.username, 'password': secret.password,
+                    'url': secret.url}
+            for key in secret.custom_properties.keys():
+                var = key
+                val = secret.custom_properties[var]
+                if var in data:
+                    var = 'custom_' + var
+                data[var] = val
+            return_data.append(data)
+    else:
+        return_data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in secret_set]
+    return make_response({'msg': 'ok', 'data': return_data}, 200)
 
 
 @api_secret.route(api_prefix, methods=['POST'])

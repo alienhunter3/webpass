@@ -51,5 +51,27 @@ def group_secrets(uuid: str):
     group = g.db.find_groups_by_uuid(uuid_obj, first=True)
     if group is None:
         return make_response({'msg': 'group not found'}, 404)
-    data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in group.entries]
-    return make_response({'msg': 'ok', 'data': data}, 200)
+    fetch_all_details = False
+    if 'fetch_all' in request.args:
+        if request.args['fetch_all'].strip().lower() in ['y', 'yes', 'true', '1']:
+            fetch_all_details = True
+    if fetch_all_details:
+        return_data = []
+        for secret in group.entries:
+            attachments = []
+            for a in secret.attachments:
+                attachments.append({'id': a.id, 'file_name': a.filename})
+            data = {'name': secret.title, 'path': f"/{'/'.join(secret.path)}", 'uuid': secret.uuid,
+                    'notes': secret.notes,
+                    'attachments': attachments, 'username': secret.username, 'password': secret.password,
+                    'url': secret.url}
+            for key in secret.custom_properties.keys():
+                var = key
+                val = secret.custom_properties[var]
+                if var in data:
+                    var = 'custom_' + var
+                data[var] = val
+            return_data.append(data)
+    else:
+        return_data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in group.entries]
+    return make_response({'msg': 'ok', 'data': return_data}, 200)

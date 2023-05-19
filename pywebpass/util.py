@@ -4,6 +4,7 @@ from configparser import ConfigParser
 import logging
 from systemdlogging.toolbox import init_systemd_logging
 from uuid import UUID
+from typing import Union
 
 
 def parse_log_level(level: str) -> int:
@@ -92,3 +93,16 @@ def is_uuid(val: str) -> bool:
     except ValueError as e:
         return False
     return True
+
+
+def resolve_uuid(uuid: Union[str, bytes, UUID, int]) -> UUID:
+    t = type(uuid)
+    if t is int:
+        uuid = UUID(int=uuid)
+    elif t is bytes:
+        uuid = UUID(bytes=uuid)
+    elif t is UUID:
+        pass
+    else:
+        uuid = UUID(str(uuid))
+    return uuid

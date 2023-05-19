@@ -11,4 +11,7 @@ setup(
         'requests',
         'systemd-logging',
     ],
+    entry_points={
+        'console_scripts': ['webpass-client=pywebpass.client.command:main'],
+    }
 )
