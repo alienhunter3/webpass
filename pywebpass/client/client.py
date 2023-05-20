@@ -5,6 +5,7 @@ from typing import Union, IO
 from uuid import UUID
 from pywebpass.util import resolve_uuid
 from enum import Enum
+from dataclasses import dataclass
 
 from tempfile import TemporaryFile
 import json
@@ -12,9 +13,21 @@ import json
 same_fields = ["url", "notes", "username", "password", "uuid"]
 
 
+@dataclass
+class Attachment:
+    index: int
+    file_name: str
+    parent: Secret
+
+    def get_file(self):
+        return self.parent.get_file(self.index)
+
+    def short_string(self):
+        return f"[{self.index}]{self.file_name}"
+
 class Secret:
 
-    def __init__(self, data: Union[dict, None] = None, client=None):
+    def __init__(self, data: Union[dict, None] = None, client: Union[ClientProxy, None] = None):
         self._username = ''
         self._password = ''
         self._files = []
@@ -31,10 +44,14 @@ class Secret:
             field.strip().lower()
             if field in same_fields:
                 self.__setattr__(field, data[field])
-            elif field == "attachments":
-                self._files = data['attachments']
             elif field == "files":
-                self._custom['files'] = str(data['files'])
+                self._custom[field] = str(data[field])
+            elif field == "attachments":
+                if type(data[field]) is list:
+                    for i in data[field]:
+                        self._files.append(Attachment(index=i['id'], file_name=i['file_name'], parent=self))
+                else:
+                    continue
             elif field == 'name':
                 self.__setattr__('title', data['name'])
             elif field == "title":
@@ -44,6 +61,12 @@ class Secret:
             else:
                 self._custom[field] = str(data[field])
         self._changed = set()
+
+    def __repr__(self):
+        return f"Secret({str(self.uuid)})"
+
+    def __str__(self):
+        return self.__repr__()
 
     @property
     def dict(self) -> dict:
@@ -58,6 +81,10 @@ class Secret:
     def json(self) -> str:
         d = self.dict
         d['uuid'] = str(d['uuid'])
+        atts = []
+        for i in d['files']:
+            atts.append({'index': i.index, 'file_name': i.file_name})
+        d['files'] = atts
         return json.dumps(d)
 
     @property
@@ -209,25 +236,37 @@ class ClientProxy:  # TODO
         self.client = client
 
     @staticmethod
-    def api_proxy(base_url: str, password: str) -> ClientProxy: # TODO
+    def api_proxy(base_url: str, password: str) -> ClientProxy:  # TODO
         return ClientProxy(ApiClient(base_url, password))
 
     @staticmethod
     def keepass_proxy(db_file: Union[str, IO]) -> ClientProxy: # TODO
         pass
 
-    def get_secret_uuid(self, uuid: Union[UUID, int, bytes, str]):
+    def get_secret_uuid(self, uuid: Union[UUID, int, bytes, str]) -> Secret:
         secret_raw = self.client.secret_uuid(resolve_uuid(uuid))
         return Secret(secret_raw, client=self)
+
+    def get_all_secrets(self) -> list:
+        secrets = self.client.all_secrets
+        return [Secret(x, client=self) for x in secrets]
 
     def update_secret(self, secret: Secret):  # TODO
         pass
 
-    def get_file_index(self, secret: Secret, index: int) -> IO:  # TODO
-        pass
+    def get_file_index(self, secret: Secret, index: int) -> IO:
+        return self.client.secret_attachment(secret.uuid, index)
 
     def update_property(self, secret: Secret, key: str, value: str):  # TODO
         pass
 
-    def list_files(self, secret: Secret) -> list:  # TODO
-        return []
+    def get_groups(self) -> list:
+        return self.client.groups
+
+    def get_group_secrets(self, group: str) -> list:
+        secrets = self.client.secret_group_name(group)
+        return [Secret(x, client=self) for x in secrets]
+
+    def search(self, needle: str) -> list:
+        return [Secret(x, client=self) for x in self.client.search(needle)]
+

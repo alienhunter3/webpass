@@ -8,6 +8,7 @@ from pykeepass.exceptions import CredentialsError
 from uuid import UUID
 from werkzeug.exceptions import BadRequest
 from .keepass import find_group
+from io import BytesIO
 
 api_secret = Blueprint('api_secret', __name__)
 api_prefix = '/secret'

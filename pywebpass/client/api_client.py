@@ -3,6 +3,7 @@ import requests
 from typing import Union
 from uuid import UUID
 from urllib.parse import quote_plus
+from io import BytesIO
 
 
 class ApiClient:
@@ -68,5 +69,15 @@ class ApiClient:
                     secrets.append(secret)
         return secrets
 
+    def secret_attachment(self, uuid: Union[str, UUID], index: int) -> BytesIO:
+        uuid = quote_plus(str(uuid))
+        url = f"{self.secret_url}/{uuid}/attachment/{int(index)}"
+        r = requests.get(url, auth=self.creds, verify=self.ssl_verify)
+        if r.status_code == 404:
+            raise KeyError("Couldn't find secret with provided UUID")
+        elif r.status_code == 200:
+            return BytesIO(r.content)
+        else:
+            raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
 
 
