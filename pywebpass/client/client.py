@@ -4,8 +4,10 @@ from .keepaass_client import KeepassClient
 from typing import Union, IO
 from uuid import UUID
 from pywebpass.util import resolve_uuid
+from pywebpass.keepass import entry_to_dict
 from enum import Enum
 from dataclasses import dataclass
+from pykeepass import entry
 
 from tempfile import TemporaryFile
 import json
@@ -24,6 +26,7 @@ class Attachment:
 
     def short_string(self):
         return f"[{self.index}]{self.file_name}"
+
 
 class Secret:
 
@@ -67,6 +70,10 @@ class Secret:
 
     def __str__(self):
         return self.__repr__()
+
+    @staticmethod
+    def secret_from_entry(secret: entry) -> Secret:
+        return Secret(entry_to_dict(secret))
 
     @property
     def dict(self) -> dict:
@@ -236,12 +243,12 @@ class ClientProxy:  # TODO
         self.client = client
 
     @staticmethod
-    def api_proxy(base_url: str, password: str) -> ClientProxy:  # TODO
+    def api_proxy(base_url: str, password: str) -> ClientProxy:
         return ClientProxy(ApiClient(base_url, password))
 
     @staticmethod
-    def keepass_proxy(db_file: Union[str, IO]) -> ClientProxy: # TODO
-        pass
+    def keepass_proxy(db_file: Union[str, IO], password: str) -> ClientProxy:
+        return ClientProxy(KeepassClient(db_file, password))
 
     def get_secret_uuid(self, uuid: Union[UUID, int, bytes, str]) -> Secret:
         secret_raw = self.client.secret_uuid(resolve_uuid(uuid))

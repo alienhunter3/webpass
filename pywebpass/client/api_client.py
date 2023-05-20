@@ -1,4 +1,3 @@
-from pywebpass import keepass
 import requests
 from typing import Union
 from uuid import UUID
@@ -16,22 +15,22 @@ class ApiClient:
             self.base_url = self.base_url[:-1]
 
     @property
-    def group_url(self):
+    def group_url(self) -> str:
         return self.base_url + "/group"
 
     @property
-    def secret_url(self):
+    def secret_url(self) -> str:
         return self.base_url + "/secret"
 
     @property
-    def groups(self):
+    def groups(self) -> list:
         r = requests.get(self.group_url, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
         return r.json()['data']
 
     @property
-    def all_secrets(self):
+    def all_secrets(self) -> list:
         r = requests.get(self.secret_url, params={'fetch_all': "true"}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
@@ -40,13 +39,13 @@ class ApiClient:
     def authenticate(self):
         throw_away = self.groups
 
-    def search(self, needle: str):
+    def search(self, needle: str) -> list:
         r = requests.get(self.secret_url, params={'fetch_all': "true", "search": needle}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
         return r.json()['data']
 
-    def secret_uuid(self, uuid: Union[str, UUID]):
+    def secret_uuid(self, uuid: Union[str, UUID]) -> dict:
         uuid = quote_plus(str(uuid))
         r = requests.get(self.secret_url + "/" + uuid, params={'fetch_all': "true"}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code == 404:
@@ -57,7 +56,7 @@ class ApiClient:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
         return r.json()['data']
 
-    def secret_group_name(self, group_name: str):
+    def secret_group_name(self, group_name: str) -> list:
         group_name = group_name.strip().lower()
         groups = self.groups
         secrets = []
