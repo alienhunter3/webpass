@@ -13,5 +13,5 @@ setup(
     ],
     entry_points={
         'console_scripts': ['webpass-client=pywebpass.client.command:main'],
-    }
-)
+    },
+ )

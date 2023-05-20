@@ -8,8 +8,6 @@ from pywebpass.keepass import entry_to_dict
 from enum import Enum
 from dataclasses import dataclass
 from pykeepass import entry
-
-from tempfile import TemporaryFile
 import json
 
 same_fields = ["url", "notes", "username", "password", "uuid"]

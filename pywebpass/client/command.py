@@ -1,10 +1,15 @@
 from argparse import ArgumentParser
 from .client import ClientProxy, Secret
+from .config import load_config, create_local_data, get_file_time, map_string_to_cache_file
+from .config import create_local_data, write_config_template, create_cache_dir
 from typing import Union
 import json
 from getpass import getpass
+from configparser import ConfigParser
+
 import os
-import sys
+from os.path import join, isdir, isfile
+from tempfile import TemporaryFile
 
 
 def handle_args():
@@ -18,6 +23,10 @@ def handle_args():
     parser.add_argument("--show-all", action='store_true')
     parser.add_argument("-s", "--search", type=str)
     parser.add_argument("-g", "--group", type=str)
+    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("-k", "--allow-ssl", action="store_true")
+    parser.add_argument("-S", "--sync", action="store_true")
+    parser.add_argument("-C", "--no-config", action="store_true")
     return parser
 
 
@@ -113,24 +122,46 @@ def formatter(objects: list, columns: Union[list, None] = None, fmt="row", show_
         first = False
 
 
+def sync_db(cfg: ConfigParser):
+
+
+
 def main():
     output = []
     arg_parser = handle_args()
     args = arg_parser.parse_args()
     search_count = 0
-    password = os.environ.get("WEBPASS_PASSWORD", "")
+    if args.no_config:
+        cfg = load_config(use_local=False)
+    else:
+        cfg = load_config(use_local=True)
+
+    if args.password:
+        cfg['API']['api_password'] = getpass("Password for API:")
+
+    if args.address is not None:
+        cfg['API']['api_address'] = args.address
+
+    if 'api_address' not in cfg['API']:
+        raise RuntimeError("Must provide api_address through WEBPASS_ADDRESS, -a argument, or config_file")
+
+    if args.no_cache:
+        cfg['API']['cache'] = 'no'
+
     for i in [args.group, args.search, args.uuid]:
         if i is not None:
             search_count = search_count + 1
     if search_count > 1:
         raise RuntimeError("Cannot use more than one of [-s, -g, -u].")
 
+    # prepare client
     client = None
-    if args.password:
-        password = getpass("Password for API:")
+    if cfg['API'].getboolean("cache"):
+        create_cache_dir()
 
-    if args.address is not None:
-        client = ClientProxy.api_proxy(args.address, password)
+
+
+    # perform query
 
     if (args.uuid is None) and (args.search is None) and (args.group is None):
         output = client.get_all_secrets()
