@@ -32,6 +32,8 @@ def handle_args():
     parser.add_argument("-S", "--sync", action="store_true")
     parser.add_argument("-C", "--no-config", action="store_true")
     parser.add_argument("-F", "--show-file", action="store_true")
+    parser.add_argument("-i", "--file-index", type=int)
+    parser.add_argument("-o", "--file-out", type=str)
     return parser
 
 
@@ -144,7 +146,27 @@ def main():
     output = []
     arg_parser = handle_args()
     args = arg_parser.parse_args()
-    search_count = 0
+    get_attachment = False
+
+    # pre-validation
+
+    file_count = 0
+    for i in [args.file_out, args.file_index]:
+        if i is not None:
+            file_count = file_count + 1
+
+    if file_count == 1:
+        raise RuntimeError("Cannot use -o without -i, or -i without -o.")
+
+    if file_count == 2:
+        if args.uuid is None:
+            raise RuntimeError("Cannot use attachment retrieval operations without using -u flag.")
+        get_attachment = True
+
+    # setup config
+
+
+
     if args.no_config:
         cfg = load_config(use_local=False)
     else:
@@ -162,6 +184,8 @@ def main():
     if args.no_cache:
         cfg['API']['cache'] = 'no'
 
+    # check search flags
+    search_count = 0
     for i in [args.group, args.search, args.uuid]:
         if i is not None:
             search_count = search_count + 1
@@ -199,7 +223,25 @@ def main():
             for i in client.get_group_secrets(args.group):
                 output.append(i)
 
-    formatter(output, args.column, fmt=args.format, show_all=args.show_all, no_header=args.no_header)
+    if get_attachment:
+        if len(output) != 1:
+            raise RuntimeError("UUID must match exactly one secret, to retrieve attached files.")
+        found = None
+        for f in output[0].files:
+            if args.file_index == f.index:
+                found = f
+                break
+        if found is None:
+            raise KeyError(f"This secret doesn't contain an attachment with index {args.file_index}")
+
+        stream = found.get_file()
+        if args.file_out == "-":
+            dest = sys.stdout.buffer
+        else:
+            dest = open(args.file_out, 'wb')
+        dest.write(stream.read())
+    else:
+        formatter(output, args.column, fmt=args.format, show_all=args.show_all, no_header=args.no_header)
 
 
 if __name__ == "__main__":

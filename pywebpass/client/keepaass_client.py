@@ -49,4 +49,11 @@ class KeepassClient:
 
     def secret_attachment(self, uuid: Union[str, UUID, bytes, int], index: int) -> BytesIO:
         secret = keepass.secret_by_uuid(self.db, uuid)
-        return BytesIO(secret.attachments[index].data)
+        attachment = None
+        for a in secret.attachments:
+            if index == a.id:
+                attachment = a
+                break
+        if attachment is None:
+            raise KeyError(f"Secret didn't contain attachment with index {index}")
+        return BytesIO(a.binary)
