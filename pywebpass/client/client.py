@@ -13,6 +13,10 @@ import json
 same_fields = ["url", "notes", "username", "password", "uuid"]
 
 
+class AccessDeniedError(Exception):
+    pass
+
+
 @dataclass
 class Attachment:
     index: int

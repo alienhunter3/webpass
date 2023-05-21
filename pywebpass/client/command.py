@@ -1,11 +1,15 @@
 from argparse import ArgumentParser
-from .client import ClientProxy, Secret
+
+import requests
+
+from .client import ClientProxy, Secret, AccessDeniedError
 from .config import load_config, create_local_data, get_file_time, map_string_to_cache_file
-from .config import create_local_data, write_config_template, create_cache_dir
+from .config import create_local_data, write_config_template, create_cache_dir, cache_file_expired
 from typing import Union
 import json
 from getpass import getpass
 from configparser import ConfigParser
+import sys
 
 import os
 from os.path import join, isdir, isfile
@@ -27,6 +31,7 @@ def handle_args():
     parser.add_argument("-k", "--allow-ssl", action="store_true")
     parser.add_argument("-S", "--sync", action="store_true")
     parser.add_argument("-C", "--no-config", action="store_true")
+    parser.add_argument("-F", "--show-file", action="store_true")
     return parser
 
 
@@ -36,7 +41,7 @@ def json_formatter(secrets: list[Secret], fields: list[str]):
         if len(fields) == 0:
             output_array.append(secret.json)
             continue
-        output_array.append(secret.json_fields(fields))
+        output_array.append(json.loads(secret.json_fields(fields)))
     print(json.dumps({"secrets": output_array}))
 
 
@@ -123,7 +128,16 @@ def formatter(objects: list, columns: Union[list, None] = None, fmt="row", show_
 
 
 def sync_db(cfg: ConfigParser):
-
+    db_path = map_string_to_cache_file(cfg['API']['api_address'])
+    addr = cfg['API']['api_address']
+    p = cfg['API']['api_password']
+    r = requests.get(f"{addr}/file", auth=('', p))
+    if r.status_code == 401:
+        raise AccessDeniedError("Credentials incorrect.")
+    if r.status_code != 200:
+        raise requests.HTTPError(f"HTTP Error connecting to {addr}: {r.status_code}")
+    else:
+        open(db_path, 'wb').write(r.content)
 
 
 def main():
@@ -158,9 +172,19 @@ def main():
     client = None
     if cfg['API'].getboolean("cache"):
         create_cache_dir()
+        db_path = map_string_to_cache_file(cfg['API']['api_address'])
+        if args.sync or (not isfile(db_path)) or cache_file_expired(cfg, db_path):
+            sync_db(cfg)
 
+        client = ClientProxy.keepass_proxy(db_path, cfg['API']['api_password'])
 
+    else:
+        client = ClientProxy.api_proxy(cfg['API']['api_address'], cfg['API']['api_password'])
 
+    # break
+    if args.show_file and not args.no_cache:
+        print(map_string_to_cache_file(cfg['API']['api_address']))
+        sys.exit(0)
     # perform query
 
     if (args.uuid is None) and (args.search is None) and (args.group is None):
