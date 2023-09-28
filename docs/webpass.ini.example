@@ -1,0 +1,6 @@
+[uwsgi]
+socket = /srv/http/webpass-venv/webpass.sock
+module = wsgi:app
+chmod-socket = 664
+uid = www-data
+gid = www-data
