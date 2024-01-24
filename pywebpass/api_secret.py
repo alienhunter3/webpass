@@ -1,7 +1,6 @@
 import logging
 
 from flask import Blueprint, g, current_app, request, make_response, send_file
-from io import BytesIO
 from traceback import format_exc
 from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
@@ -187,11 +186,11 @@ def secret_update(uuid: str):
     try:
         g.db.save()
         return make_response({'msg': 'ok', 'secret': f'{str(secret.uuid)}'}, 200)
-    except:
+    except Exception:
         return make_response({'msg': "Couldn't save changes to database due to unknown error."}, 500)
 
 
-@api_secret.route(api_prefix + '/<string:uuid>/attachment/<int:attachment_id>')
+@api_secret.route(api_prefix + '/<string:uuid>/attachment/<int:attachment_id>', methods=['GET'])
 def secret_attachments(uuid: str, attachment_id: int):
     try:
         uuid_obj = UUID(uuid)
@@ -205,3 +204,27 @@ def secret_attachments(uuid: str, attachment_id: int):
         if a.id == attachment_id:
             return send_file(path_or_file=BytesIO(a.binary), download_name=a.filename, as_attachment=True)
     return make_response({'msg': 'attachment not found'}, 404)
+
+
+@api_secret.route(api_prefix + '/<string:uuid>/attachment', methods=['POST'])
+def secret_attachments(uuid: str):
+    try:
+        uuid_obj = UUID(uuid)
+    except ValueError as e:
+        return make_response({'msg': 'incorrectly formatted uuid value'}, 400)
+    secret = g.db.find_entries_by_uuid(uuid_obj, first=True)
+    if secret is None:
+        return make_response({'msg': 'secret not found'}, 404)
+    if len(request.files) == 0:
+        return make_response({'msg': 'no file data to upload'}, 400)
+    if 'attachment' not in request.files:
+        return make_response({'msg': 'no file data to upload'}, 400)
+
+    # add the attachment to the DB as binary data, and then point a new attachment to it
+    file = request.files['attachment']
+    file_name = file.filename
+    binary_data = file.stream.read()
+    binary_id = g.db.add_binary(binary_data)
+    secret.add_attachment(binary_id, file_name)
+    g.db.save()
+    return make_response({'msg': 'ok. attachment uploaded.'}, 201)
