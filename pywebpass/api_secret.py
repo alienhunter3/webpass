@@ -207,7 +207,7 @@ def secret_attachments(uuid: str, attachment_id: int):
 
 
 @api_secret.route(api_prefix + '/<string:uuid>/attachment', methods=['POST'])
-def secret_attachments(uuid: str):
+def post_secret_attachment(uuid: str):
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:

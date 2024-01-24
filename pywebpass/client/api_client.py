@@ -1,3 +1,5 @@
+import typing
+
 import requests
 from typing import Union
 from uuid import UUID
@@ -79,4 +81,15 @@ class ApiClient:
         else:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
 
+    """Posts a file like object's binary data as a new attachment to the specified secret."""
+    def post_secret_attachment(self, uuid: Union[str, UUID], file_object: typing.BinaryIO, file_name: str):
+        uuid = quote_plus(str(uuid))
+        url = f"{self.secret_url}/{uuid}/attachment"
 
+        files = {'attachment': (file_name, file_object)}
+
+        r = requests.post(url, auth=self.creds, files=files, verify=self.ssl_verify)
+        if r.status_code == 404:
+            raise KeyError("Couldn't find secret with provided UUID")
+        elif r.status_code != 201:
+            raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}:\n{r.text}")
