@@ -2,5 +2,9 @@
 socket = /srv/http/webpass-venv/webpass.sock
 module = wsgi:app
 chmod-socket = 664
+
+## For Apache try:
+# http-socket = :8080 # or whatever port
+
 uid = www-data
 gid = www-data
