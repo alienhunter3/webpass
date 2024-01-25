@@ -98,6 +98,8 @@
                 <h2>Secret (<a href="#" onclick="updateSecretClick()">update</a>)</h2>
                 <div id="secret_content">
                 </div>
+                <hr/>
+                <div style="text-align: center;"><a href="#" onclick="addAttachmentClick()">Add Attachment</a></div>
             </div>
             <div hidden id="database">
                 <h2>Database File</h2>
@@ -112,6 +114,14 @@
                   <input type="file" name="db_upload" id="db_upload">
                   <input type="hidden" name="password" id="db_upload_pw" value="">
                   <input type="submit" value="Upload KeePass DB" name="submit">
+                </form>
+            </div>
+            <div hidden id="attachment">
+                <h2>Attach File</h2>
+                <form method="post" id="attachment_upload_form">
+                  Select file to attach to secret '<span id="attachment_secret_name">BLANK</span>':<br/>
+                  <input type="file" name="attachment" id="attachment_input"><br/>
+                  <button id="attach_button" type="button">Attach</button>
                 </form>
             </div>
             <div hidden id="loading">

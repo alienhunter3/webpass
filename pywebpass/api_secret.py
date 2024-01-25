@@ -215,6 +215,9 @@ def post_secret_attachment(uuid: str):
     secret = g.db.find_entries_by_uuid(uuid_obj, first=True)
     if secret is None:
         return make_response({'msg': 'secret not found'}, 404)
+
+    current_app.logger.debug(f"file data: {len(request.files)} - {request.files.keys()}")
+    current_app.logger.debug(f"request body: {request.data}")
     if len(request.files) == 0:
         return make_response({'msg': 'no file data to upload'}, 400)
     if 'attachment' not in request.files:

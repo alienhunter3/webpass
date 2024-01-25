@@ -7,7 +7,7 @@ const api_base = window.location + 'api';
 const api_group = api_base + '/group';
 const api_secret = api_base + '/secret';
 const api_db = api_base + '/file';
-const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit', 'database', 'upload'];
+const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit', 'database', 'upload', 'attachment'];
 function loggedIn(){
     if (pw == ""){
         return false;
@@ -598,4 +598,65 @@ function showDatabaseUploadForm(){
     var upass = document.getElementById("db_upload_pw");
     upass.value = pw;
     forefront('upload');
+}
+
+function addAttachmentClick(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+
+    if (current_secret === null){
+        alert("No secret currently selected.")
+    }
+
+    document.getElementById("attachment_secret_name").innerHTML = current_secret.name
+
+    var attachButton = document.getElementById("attach_button");
+    attachButton.removeAttribute("onclick");
+    attachButton.onclick = addAttachmentPost;
+    forefront('attachment');
+}
+
+function addAttachmentPost(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+    }
+
+    if (current_secret === null){
+        alert("No secret currently selected.");
+    }
+
+    forefront('loading');
+
+    var form = document.getElementById("attachment_upload_form")
+    var formData = new FormData(form);
+    //formData.append("attachment", fileInput.files[0]);
+
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 201){
+                secretClick(current_secret.uuid);
+            }
+            else if(this.status == 400){
+                alert('Could not create new secret because of invalid request:' + this.responseText);
+                secretClick(current_secret.uuid);
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+                secretClick(current_secret.uuid);
+            }
+            else{
+                alert('Unknown Error creating secret.');
+                secretClick(current_secret.uuid);
+            }
+        }
+    };
+
+    XMLReq.open("POST", api_secret + '/' + current_secret.uuid + "/attachment", true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    //XMLReq.setRequestHeader("Content-Type", "multipart/form-data;");
+    XMLReq.send(formData);
 }
