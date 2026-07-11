@@ -1,3 +1,5 @@
+"""CLI/client configuration and local KeePass cache helpers."""
+
 from configparser import ConfigParser
 import os
 from os.path import isfile, join, exists
@@ -25,28 +27,38 @@ config_file_path = join(config_dir, 'config.ini')
 
 
 def write_config_template():
+    """Create ``config.ini`` from the built-in template if it does not exist."""
     Path(config_dir).mkdir(parents=True, exist_ok=True)
     if not exists(config_file_path):
         open(config_file_path, 'w').write(config_template)
 
 
 def create_local_data():
+    """Ensure data/cache directories exist and write a config template if needed."""
     Path(data_dir).mkdir(parents=True, exist_ok=True)
     Path(cache_db_dir).mkdir(parents=True, exist_ok=True)
     write_config_template()
 
 
 def create_cache_dir():
+    """Create the local KeePass cache directory if missing."""
     Path(cache_db_dir).mkdir(parents=True, exist_ok=True)
 
 
 def map_string_to_cache_file(string: str) -> str:
+    """Map a string (usually the API address) to a hashed ``.kdbx`` cache path."""
     hash_str = hashlib.md5(string.encode('utf-8')).hexdigest()
     file_name = hash_str + ".kdbx"
     return join(cache_db_dir, file_name)
 
 
 def load_config(use_local=True) -> ConfigParser:
+    """Load client config from disk and environment overrides.
+
+    Environment:
+        WEBPASS_PASSWD: overrides ``API.api_password``.
+        WEBPASS_ADDRESS: overrides ``API.api_address``.
+    """
     config = ConfigParser()
     config.add_section("API")
     config['API']['cache'] = 'yes'
@@ -68,6 +80,7 @@ def load_config(use_local=True) -> ConfigParser:
 
 
 def parse_delta(delta: str) -> timedelta:
+    """Parse a duration like ``1h``, ``10s``, ``1d``, or a bare second count."""
     if not str.isalnum(delta):
         raise ValueError("timeout string must be in form of <quantity><unit_code>. Ex: 1h, 10s, 1d")
 
@@ -98,11 +111,13 @@ def parse_delta(delta: str) -> timedelta:
 
 
 def get_file_time(file_path: str) -> datetime:
+    """Return the local mtime of ``file_path`` as a :class:`~datetime.datetime`."""
     stamp = os.path.getmtime(file_path)
     return datetime.fromtimestamp(stamp)
 
 
 def cache_file_expired(cfg: ConfigParser, file_path) -> bool:
+    """Return whether ``file_path`` is older than ``API.cache_timeout``."""
     timeout = cfg['API'].get('cache_timeout', fallback="1h")
     td = parse_delta(timeout)
     file_time = get_file_time(file_path)

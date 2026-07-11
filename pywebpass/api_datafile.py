@@ -1,3 +1,9 @@
+"""Database file REST endpoints under ``/api/file``.
+
+Authentication is HTTP Basic (KeePass master password) or, for multipart
+requests, a form field named ``password``.
+"""
+
 import os
 
 from flask import Blueprint, g, current_app, request, make_response, send_file
@@ -41,11 +47,23 @@ def before_request_func():
 
 @api_datafile.route(api_prefix, methods=['GET'])
 def get_file():
+    """``GET /api/file`` — download the current ``.kdbx`` database file."""
     return send_file(g.db.filename)
 
 
 @api_datafile.route(api_prefix, methods=['POST'])
 def update_file():
+    """``POST /api/file`` — replace the server database with an uploaded ``.kdbx``.
+
+    Multipart form:
+        db_upload: The new ``.kdbx`` file (must open with the same master password).
+        password: Optional alternate to HTTP Basic for auth.
+
+    The previous database is archived under ``db_archive/`` before replacement.
+
+    Response:
+        ``200`` on success; ``400`` for bad upload/password; ``500`` on I/O errors.
+    """
     base_dir = dirname(g.db.filename)
     archive_dir = join(base_dir, "db_archive")
     tmp_db = join(base_dir, 'tmp_db.kdbx')
@@ -100,6 +118,12 @@ def update_file():
 
 @api_datafile.route(api_prefix + "/details", methods=['GET'])
 def get_file_details():
+    """``GET /api/file/details`` — metadata about the server database.
+
+    Response:
+        ``200`` with ``details`` containing ``last_modified``, ``size_bytes``,
+        ``entries``, and ``groups``.
+    """
     mod_date = datetime.datetime.fromtimestamp(Path(g.db.filename).stat().st_mtime)
     size = Path(g.db.filename).stat().st_size
     num_entries = len(g.db.entries)

@@ -1,3 +1,9 @@
+"""Group REST endpoints under ``/api/group``.
+
+All routes require HTTP Basic authentication. The password is the KeePass
+master password; the username is ignored.
+"""
+
 from flask import Blueprint, g, current_app, request, make_response
 from traceback import format_exc
 from pykeepass import PyKeePass
@@ -24,12 +30,23 @@ def before_request_func():
 
 @api_group.route(api_prefix)
 def all_groups():
+    """``GET /api/group`` — list all groups.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": [{"uuid", "name"}, ...]}``.
+    """
     data = [{'uuid': str(x.uuid), 'name': x.name} for x in g.db.groups]
     return make_response({'msg': 'ok', 'data': data}, 200)
 
 
 @api_group.route(api_prefix + '/<string:uuid>')
 def group_details(uuid: str):
+    """``GET /api/group/<uuid>`` — details for one group.
+
+    Response:
+        ``200`` with name, path, uuid, notes, and ``num_entries``.
+        ``400`` / ``404`` for bad or missing UUID.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:
@@ -44,6 +61,15 @@ def group_details(uuid: str):
 
 @api_group.route(api_prefix + '/<string:uuid>/secrets')
 def group_secrets(uuid: str):
+    """``GET /api/group/<uuid>/secrets`` — secrets in a group.
+
+    Query params:
+        fetch_all: If truthy, return full entry details including passwords.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": [...]}``.
+        ``400`` / ``404`` for bad or missing group UUID.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:

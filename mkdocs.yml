@@ -1,0 +1,38 @@
+site_name: pywebpass
+site_description: KeePass-backed password manager with REST API and client library
+repo_url: https://github.com/alienhunter3/webpass
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_source: true
+            members_order: source
+            filters:
+              - "!^_"
+              - "!^before_request"
+
+watch:
+  - pywebpass
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Deployment: deployment.md
+  - Client:
+      - Overview: client/index.md
+      - Reference: client/reference.md
+  - REST API:
+      - Overview: api/index.md
+      - Reference: api/reference.md
+  - Examples: examples/index.md
