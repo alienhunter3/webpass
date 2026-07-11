@@ -1,0 +1,15 @@
+# FOR SYSTEMD UWSGI SETUP
+[Unit]
+Description=uWSGI instance to serve webpass
+After=network.target
+
+[Service]
+User=webpass
+Group=www-data
+WorkingDirectory=/srv/http/webpass-venv
+Environment="PATH=/srv/http/webpass-venv/bin"
+Environment=APP_PATH=/password
+ExecStart=/srv/http/webpass-venv/bin/uwsgi --ini webpass.ini
+
+[Install]
+WantedBy=multi-user.target
