@@ -25,25 +25,43 @@ PACKAGE_NAME = "pywebpass"
 
 def handle_args():
     parser = ArgumentParser(description="Interact with secrets.")
-    parser.add_argument("-a", "--address", type=str)
-    parser.add_argument("-p", "--password", action="store_true")
-    parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument("-k", "--allow-ssl", action="store_true")
-    parser.add_argument("-S", "--sync", action="store_true")
-    parser.add_argument("-C", "--no-config", action="store_true")
-    parser.add_argument("-F", "--show-file", action="store_true")
+    parser.add_argument("-a", "--address", type=str,
+                        help="API base URL (overrides config / WEBPASS_ADDRESS)")
+    parser.add_argument("-p", "--password", action="store_true",
+                        help="Prompt for the API password")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Disable local KeePass cache; talk to the API directly")
+    parser.add_argument("-k", "--allow-ssl", action="store_true",
+                        help="Allow connections with unverified SSL certificates")
+    parser.add_argument("-S", "--sync", action="store_true",
+                        help="Force-refresh the local KeePass cache from the API")
+    parser.add_argument("-C", "--no-config", action="store_true",
+                        help="Ignore the local config file; use env/flags only")
+    parser.add_argument("-F", "--show-file", action="store_true",
+                        help="Print the local cache file path and exit")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     get_parser = subparsers.add_parser("get", help="Search and retrieve secrets.")
-    get_parser.add_argument("-u", "--uuid", type=str)
-    get_parser.add_argument("-f", "--format", choices=['pretty', 'json', 'row'], default="row")
-    get_parser.add_argument("-n", "--no-header", action="store_true")
-    get_parser.add_argument("-c", "--column", action="append")
-    get_parser.add_argument("--show-all", action='store_true')
-    get_parser.add_argument("-s", "--search", type=str)
-    get_parser.add_argument("-g", "--group", type=str)
-    get_parser.add_argument("-i", "--file-index", type=int)
-    get_parser.add_argument("-o", "--file-out", type=str)
+    get_parser.add_argument("-u", "--uuid", type=str,
+                            help="Fetch the secret with this UUID")
+    get_parser.add_argument("-f", "--format", choices=['pretty', 'json', 'row'], default="row",
+                            help="Output format (default: row)")
+    get_parser.add_argument("-n", "--no-header", action="store_true",
+                            help="Omit the column header row (row format only)")
+    get_parser.add_argument("-c", "--column", action="append",
+                            help="Column(s) to show, e.g. title,username,files "
+                                 "(repeatable; default: title,username,uuid)")
+    get_parser.add_argument("--show-all", action='store_true',
+                            help="Show all fields (overrides --column)")
+    get_parser.add_argument("-s", "--search", type=str,
+                            help="Search secrets by title, username, notes, or attachment name")
+    get_parser.add_argument("-g", "--group", type=str,
+                            help="List secrets in this group (name, path, or UUID)")
+    get_parser.add_argument("-i", "--file-index", type=int,
+                            help="Attachment index to download (requires -u and -o)")
+    get_parser.add_argument("-o", "--file-out", type=str,
+                            help="Output path for attachment download, or '-' for stdout "
+                                 "(requires -u and -i)")
 
     gen_parser = subparsers.add_parser("generate", help="Generate a random password.")
     gen_parser.add_argument("-l", "--length", type=int, default=24, help="Password length (default: 24)")
