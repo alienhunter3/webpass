@@ -1,3 +1,5 @@
+"""HTTP client for the pywebpass REST API."""
+
 import typing
 
 import requests
@@ -8,6 +10,14 @@ from io import BytesIO
 
 
 class ApiClient:
+    """Low-level REST client using HTTP Basic auth (KeePass master password).
+
+    Args:
+        base_url: API base URL including the ``/api`` prefix (trailing slash stripped).
+        password: KeePass master password.
+        ssl_verify: Whether to verify TLS certificates.
+    """
+
     def __init__(self, base_url: str, password: str, ssl_verify: bool = True):
         self.base_url = base_url
         self.password = password
@@ -18,14 +28,17 @@ class ApiClient:
 
     @property
     def group_url(self) -> str:
+        """URL for the ``/group`` resource."""
         return self.base_url + "/group"
 
     @property
     def secret_url(self) -> str:
+        """URL for the ``/secret`` resource."""
         return self.base_url + "/secret"
 
     @property
     def groups(self) -> list:
+        """List all groups (``GET /group``)."""
         r = requests.get(self.group_url, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
@@ -33,21 +46,25 @@ class ApiClient:
 
     @property
     def all_secrets(self) -> list:
+        """List all secrets with full details (``GET /secret?fetch_all=true``)."""
         r = requests.get(self.secret_url, params={'fetch_all': "true"}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
         return r.json()['data']
 
     def authenticate(self):
+        """Validate credentials by fetching the group list."""
         throw_away = self.groups
 
     def search(self, needle: str) -> list:
+        """Search secrets (``GET /secret?fetch_all=true&search=...``)."""
         r = requests.get(self.secret_url, params={'fetch_all': "true", "search": needle}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code != 200:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
         return r.json()['data']
 
     def secret_uuid(self, uuid: Union[str, UUID]) -> dict:
+        """Fetch one secret by UUID (``GET /secret/<uuid>``)."""
         uuid = quote_plus(str(uuid))
         r = requests.get(self.secret_url + "/" + uuid, params={'fetch_all': "true"}, auth=self.creds, verify=self.ssl_verify)
         if r.status_code == 404:
@@ -59,6 +76,7 @@ class ApiClient:
         return r.json()['data']
 
     def secret_group_name(self, group_name: str) -> list:
+        """Return full details for secrets in the named group (case-insensitive)."""
         group_name = group_name.strip().lower()
         groups = self.groups
         secrets = []
@@ -71,6 +89,7 @@ class ApiClient:
         return secrets
 
     def secret_attachment(self, uuid: Union[str, UUID], index: int) -> BytesIO:
+        """Download an attachment (``GET /secret/<uuid>/attachment/<index>``)."""
         uuid = quote_plus(str(uuid))
         url = f"{self.secret_url}/{uuid}/attachment/{int(index)}"
         r = requests.get(url, auth=self.creds, verify=self.ssl_verify)
@@ -81,8 +100,8 @@ class ApiClient:
         else:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
 
-    """Posts a file like object's binary data as a new attachment to the specified secret."""
     def post_secret_attachment(self, uuid: Union[str, UUID], file_object: typing.BinaryIO, file_name: str):
+        """Upload an attachment (``POST /secret/<uuid>/attachment``)."""
         uuid = quote_plus(str(uuid))
         url = f"{self.secret_url}/{uuid}/attachment"
 
@@ -104,7 +123,11 @@ class ApiClient:
         group: str = "",
         extra: Union[dict, None] = None,
     ) -> str:
-        """Create a new secret via POST /secret. Returns the new secret's UUID string."""
+        """Create a new secret via ``POST /secret``.
+
+        Returns:
+            New secret UUID string.
+        """
         payload = {
             "title": title,
             "username": username,
@@ -147,7 +170,11 @@ class ApiClient:
         notes: Union[str, None] = None,
         extra: Union[dict, None] = None,
     ) -> str:
-        """Update fields on an existing secret via PUT /secret/<uuid>. Returns the UUID string."""
+        """Update fields on an existing secret via ``PUT /secret/<uuid>``.
+
+        Returns:
+            Secret UUID string.
+        """
         payload = {}
         if title is not None:
             payload["title"] = title

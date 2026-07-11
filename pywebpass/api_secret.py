@@ -1,3 +1,9 @@
+"""Secret REST endpoints under ``/api/secret``.
+
+All routes require HTTP Basic authentication. The password is the KeePass
+master password; the username is ignored.
+"""
+
 import logging
 
 from flask import Blueprint, g, current_app, request, make_response, send_file
@@ -29,6 +35,18 @@ def before_request_func():
 
 @api_secret.route(api_prefix, methods=['GET'])
 def root_secrets():
+    """``GET /api/secret`` — list or search secrets.
+
+    Query params:
+        fetch_all: If truthy (``true``/``yes``/``1``), return full entry details
+            including password, notes, url, and attachments.
+        search: Case-insensitive substring filter on title, username, notes,
+            or attachment file names.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": [...]}``. Without ``fetch_all``,
+        each item is ``uuid``, ``title``, ``username``.
+    """
     all_secrets = g.db.entries
     fetch_all_details = False
     secret_set = []
@@ -81,6 +99,16 @@ def root_secrets():
 
 @api_secret.route(api_prefix, methods=['POST'])
 def post_secret():
+    """``POST /api/secret`` — create a secret.
+
+    Request body (``application/json``):
+        title, username, password, url, notes, group (path/name hint),
+        and optional ``extra`` object for custom properties.
+
+    Response:
+        ``201`` with ``{"msg": "ok", "secret": "<uuid>"}``.
+        ``400`` on invalid JSON, wrong content type, or duplicate title in group.
+    """
     json_data = {}
     if str(request.content_type).find('json') != -1:
         try:
@@ -129,6 +157,12 @@ def post_secret():
 
 @api_secret.route(api_prefix + '/<string:uuid>', methods=['GET'])
 def secret_details(uuid: str):
+    """``GET /api/secret/<uuid>`` — full details for one secret.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": {...}}`` including password and attachments.
+        ``400`` for a malformed UUID; ``404`` if not found.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:
@@ -152,6 +186,15 @@ def secret_details(uuid: str):
 
 @api_secret.route(api_prefix + '/<string:uuid>', methods=['PUT'])
 def secret_update(uuid: str):
+    """``PUT /api/secret/<uuid>`` — update fields on an existing secret.
+
+    Request body (``application/json``): any of ``title``, ``username``,
+    ``password``, ``url``, ``notes``, and optional ``extra`` custom properties.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "secret": "<uuid>"}``.
+        ``400`` / ``404`` on validation or missing entry.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:
@@ -205,6 +248,11 @@ def secret_update(uuid: str):
 
 @api_secret.route(api_prefix + '/<string:uuid>/attachment/<int:attachment_id>', methods=['GET'])
 def secret_attachments(uuid: str, attachment_id: int):
+    """``GET /api/secret/<uuid>/attachment/<attachment_id>`` — download an attachment.
+
+    Response:
+        File download on success; ``404`` if secret or attachment is missing.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:
@@ -221,6 +269,14 @@ def secret_attachments(uuid: str, attachment_id: int):
 
 @api_secret.route(api_prefix + '/<string:uuid>/attachment', methods=['POST'])
 def post_secret_attachment(uuid: str):
+    """``POST /api/secret/<uuid>/attachment`` — upload an attachment.
+
+    Multipart form field:
+        attachment: The file to attach.
+
+    Response:
+        ``201`` on success; ``400`` if no file; ``404`` if secret missing.
+    """
     try:
         uuid_obj = UUID(uuid)
     except ValueError as e:
