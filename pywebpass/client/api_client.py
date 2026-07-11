@@ -93,3 +93,98 @@ class ApiClient:
             raise KeyError("Couldn't find secret with provided UUID")
         elif r.status_code != 201:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}:\n{r.text}")
+
+    def post_secret(
+        self,
+        title: str,
+        username: str = "",
+        password: str = "",
+        url: str = "",
+        notes: str = "",
+        group: str = "",
+        extra: Union[dict, None] = None,
+    ) -> str:
+        """Create a new secret via POST /secret. Returns the new secret's UUID string."""
+        payload = {
+            "title": title,
+            "username": username,
+            "password": password,
+            "url": url,
+            "notes": notes,
+            "group": group,
+        }
+        if extra:
+            payload["extra"] = extra
+
+        r = requests.post(
+            self.secret_url,
+            json=payload,
+            auth=self.creds,
+            verify=self.ssl_verify,
+        )
+        if r.status_code == 401:
+            raise requests.HTTPError(f"Authentication failed for {self.secret_url}")
+        if r.status_code == 400:
+            try:
+                msg = r.json().get("msg", r.text)
+            except Exception:
+                msg = r.text
+            raise ValueError(msg)
+        if r.status_code != 201:
+            raise requests.HTTPError(
+                f"Request to {self.secret_url} returned {r.status_code}:\n{r.text}"
+            )
+        return r.json()["secret"]
+
+    def update_secret(
+        self,
+        uuid: Union[str, UUID],
+        *,
+        title: Union[str, None] = None,
+        username: Union[str, None] = None,
+        password: Union[str, None] = None,
+        url: Union[str, None] = None,
+        notes: Union[str, None] = None,
+        extra: Union[dict, None] = None,
+    ) -> str:
+        """Update fields on an existing secret via PUT /secret/<uuid>. Returns the UUID string."""
+        payload = {}
+        if title is not None:
+            payload["title"] = title
+        if username is not None:
+            payload["username"] = username
+        if password is not None:
+            payload["password"] = password
+        if url is not None:
+            payload["url"] = url
+        if notes is not None:
+            payload["notes"] = notes
+        if extra:
+            payload["extra"] = extra
+
+        if not payload:
+            raise ValueError("at least one field must be provided to update")
+
+        uuid_str = quote_plus(str(uuid))
+        endpoint = f"{self.secret_url}/{uuid_str}"
+        r = requests.put(
+            endpoint,
+            json=payload,
+            auth=self.creds,
+            verify=self.ssl_verify,
+        )
+        if r.status_code == 401:
+            raise requests.HTTPError(f"Authentication failed for {endpoint}")
+        if r.status_code == 404:
+            raise KeyError("Couldn't find secret with provided UUID")
+        if r.status_code == 400:
+            try:
+                msg = r.json().get("msg", r.text)
+            except Exception:
+                msg = r.text
+            raise ValueError(msg)
+        if r.status_code != 200:
+            raise requests.HTTPError(
+                f"Request to {endpoint} returned {r.status_code}:\n{r.text}"
+            )
+        return r.json()["secret"]

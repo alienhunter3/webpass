@@ -183,6 +183,19 @@ def secret_update(uuid: str):
             new_val = json_data[prop].strip()
             if new_val != secret.__getattribute__(prop):
                 secret.__setattr__(prop, new_val)
+
+    if 'extra' in json_data:
+        props = json_data['extra']
+        if type(props) is not dict:
+            return make_response({'msg': 'extra must be a JSON object'}, 400)
+        for raw_key, val in props.items():
+            key = str(raw_key).strip()
+            if not key:
+                continue
+            if key.lower() in ['title', 'url', 'notes', 'password', 'username', 'group']:
+                continue
+            secret.set_custom_property(key, str(val))
+
     try:
         g.db.save()
         return make_response({'msg': 'ok', 'secret': f'{str(secret.uuid)}'}, 200)

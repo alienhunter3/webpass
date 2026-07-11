@@ -279,3 +279,58 @@ class ClientProxy:  # TODO
     def search(self, needle: str) -> list:
         return [Secret(x, client=self) for x in self.client.search(needle)]
 
+    def create_secret(
+        self,
+        title: str,
+        username: str = "",
+        password: str = "",
+        url: str = "",
+        notes: str = "",
+        group: str = "",
+        extra: Union[dict, None] = None,
+    ) -> str:
+        if not isinstance(self.client, ApiClient):
+            raise RuntimeError("Creating secrets requires the API backend; local KeePass cache is read-only.")
+        return self.client.post_secret(
+            title=title,
+            username=username,
+            password=password,
+            url=url,
+            notes=notes,
+            group=group,
+            extra=extra,
+        )
+
+    def update_secret_fields(
+        self,
+        uuid: Union[UUID, int, bytes, str],
+        *,
+        title: Union[str, None] = None,
+        username: Union[str, None] = None,
+        password: Union[str, None] = None,
+        url: Union[str, None] = None,
+        notes: Union[str, None] = None,
+        extra: Union[dict, None] = None,
+    ) -> str:
+        if not isinstance(self.client, ApiClient):
+            raise RuntimeError("Updating secrets requires the API backend; local KeePass cache is read-only.")
+        return self.client.update_secret(
+            resolve_uuid(uuid),
+            title=title,
+            username=username,
+            password=password,
+            url=url,
+            notes=notes,
+            extra=extra,
+        )
+
+    def add_attachment(
+        self,
+        uuid: Union[UUID, int, bytes, str],
+        file_object: IO,
+        file_name: str,
+    ) -> None:
+        if not isinstance(self.client, ApiClient):
+            raise RuntimeError("Adding attachments requires the API backend; local KeePass cache is read-only.")
+        self.client.post_secret_attachment(resolve_uuid(uuid), file_object, file_name)
+
