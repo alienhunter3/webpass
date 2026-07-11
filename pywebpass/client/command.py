@@ -5,6 +5,7 @@ import requests
 from .client import ClientProxy, Secret, AccessDeniedError
 from .config import load_config, create_local_data, get_file_time, map_string_to_cache_file
 from .config import create_local_data, write_config_template, create_cache_dir, cache_file_expired
+from .password import generate_password
 from typing import Union
 import json
 from getpass import getpass
@@ -19,21 +20,36 @@ from tempfile import TemporaryFile
 def handle_args():
     parser = ArgumentParser(description="Interact with secrets.")
     parser.add_argument("-a", "--address", type=str)
-    parser.add_argument("-u", "--uuid", type=str)
     parser.add_argument("-p", "--password", action="store_true")
-    parser.add_argument("-f", "--format", choices=['pretty', 'json', 'row'], default="row")
-    parser.add_argument("-n", "--no-header", action="store_true")
-    parser.add_argument("-c", "--column", action="append")
-    parser.add_argument("--show-all", action='store_true')
-    parser.add_argument("-s", "--search", type=str)
-    parser.add_argument("-g", "--group", type=str)
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("-k", "--allow-ssl", action="store_true")
     parser.add_argument("-S", "--sync", action="store_true")
     parser.add_argument("-C", "--no-config", action="store_true")
     parser.add_argument("-F", "--show-file", action="store_true")
-    parser.add_argument("-i", "--file-index", type=int)
-    parser.add_argument("-o", "--file-out", type=str)
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    get_parser = subparsers.add_parser("get", help="Search and retrieve secrets.")
+    get_parser.add_argument("-u", "--uuid", type=str)
+    get_parser.add_argument("-f", "--format", choices=['pretty', 'json', 'row'], default="row")
+    get_parser.add_argument("-n", "--no-header", action="store_true")
+    get_parser.add_argument("-c", "--column", action="append")
+    get_parser.add_argument("--show-all", action='store_true')
+    get_parser.add_argument("-s", "--search", type=str)
+    get_parser.add_argument("-g", "--group", type=str)
+    get_parser.add_argument("-i", "--file-index", type=int)
+    get_parser.add_argument("-o", "--file-out", type=str)
+
+    gen_parser = subparsers.add_parser("generate", help="Generate a random password.")
+    gen_parser.add_argument("-l", "--length", type=int, default=24, help="Password length (default: 24)")
+    gen_parser.add_argument("-n", "--count", type=int, default=1, help="Number of passwords to generate (default: 1)")
+    gen_parser.add_argument("--no-lowercase", action="store_true", help="Exclude lowercase letters")
+    gen_parser.add_argument("--no-uppercase", action="store_true", help="Exclude uppercase letters")
+    gen_parser.add_argument("--no-digits", action="store_true", help="Exclude digits")
+    gen_parser.add_argument("--no-symbols", action="store_true", help="Exclude symbols")
+    gen_parser.add_argument("--allowed-symbols", type=str, default=None,
+                            help="Subset of allowed symbols (string of characters from the default set)")
+    gen_parser.add_argument("--no-ambiguous", action="store_true",
+                            help="Exclude ambiguous characters (0, O, 1, l, I, |)")
     return parser
 
 
@@ -143,30 +159,14 @@ def sync_db(cfg: ConfigParser):
 
 
 def main():
-    output = []
     arg_parser = handle_args()
     args = arg_parser.parse_args()
-    get_attachment = False
 
-    # pre-validation
-
-    file_count = 0
-    for i in [args.file_out, args.file_index]:
-        if i is not None:
-            file_count = file_count + 1
-
-    if file_count == 1:
-        raise RuntimeError("Cannot use -o without -i, or -i without -o.")
-
-    if file_count == 2:
-        if args.uuid is None:
-            raise RuntimeError("Cannot use attachment retrieval operations without using -u flag.")
-        get_attachment = True
+    if args.command == "generate":
+        _run_generate(args)
+        return
 
     # setup config
-
-
-
     if args.no_config:
         cfg = load_config(use_local=False)
     else:
@@ -183,14 +183,6 @@ def main():
 
     if args.no_cache:
         cfg['API']['cache'] = 'no'
-
-    # check search flags
-    search_count = 0
-    for i in [args.group, args.search, args.uuid]:
-        if i is not None:
-            search_count = search_count + 1
-    if search_count > 1:
-        raise RuntimeError("Cannot use more than one of [-s, -g, -u].")
 
     # prepare client
     client = None
@@ -209,8 +201,56 @@ def main():
     if args.show_file and not args.no_cache:
         print(map_string_to_cache_file(cfg['API']['api_address']))
         sys.exit(0)
-    # perform query
 
+    if args.command == "get":
+        _run_get(args, client)
+
+
+def _run_generate(args):
+    if args.count < 1:
+        raise RuntimeError("count must be at least 1")
+    if args.length < 1:
+        raise RuntimeError("length must be at least 1")
+
+    for _ in range(args.count):
+        print(generate_password(
+            args.length,
+            lowercase=not args.no_lowercase,
+            uppercase=not args.no_uppercase,
+            digits=not args.no_digits,
+            symbols=not args.no_symbols,
+            allowed_symbols=args.allowed_symbols,
+            exclude_ambiguous=args.no_ambiguous,
+        ))
+
+
+def _run_get(args, client):
+    output = []
+    get_attachment = False
+
+    # pre-validation
+    file_count = 0
+    for i in [args.file_out, args.file_index]:
+        if i is not None:
+            file_count = file_count + 1
+
+    if file_count == 1:
+        raise RuntimeError("Cannot use -o without -i, or -i without -o.")
+
+    if file_count == 2:
+        if args.uuid is None:
+            raise RuntimeError("Cannot use attachment retrieval operations without using -u flag.")
+        get_attachment = True
+
+    # check search flags
+    search_count = 0
+    for i in [args.group, args.search, args.uuid]:
+        if i is not None:
+            search_count = search_count + 1
+    if search_count > 1:
+        raise RuntimeError("Cannot use more than one of [-s, -g, -u].")
+
+    # perform query
     if (args.uuid is None) and (args.search is None) and (args.group is None):
         output = client.get_all_secrets()
     else:
