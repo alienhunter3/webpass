@@ -113,6 +113,20 @@ class ApiClient:
         elif r.status_code != 201:
             raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}:\n{r.text}")
 
+    def delete_secret_attachment(self, uuid: Union[str, UUID], index: int):
+        """Delete an attachment (``DELETE /secret/<uuid>/attachment/<index>``)."""
+        uuid = quote_plus(str(uuid))
+        url = f"{self.secret_url}/{uuid}/attachment/{int(index)}"
+        r = requests.delete(url, auth=self.creds, verify=self.ssl_verify)
+        if r.status_code == 404:
+            try:
+                msg = r.json().get("msg", r.text)
+            except Exception:
+                msg = r.text
+            raise KeyError(msg)
+        elif r.status_code != 200:
+            raise requests.HTTPError(f"Request to {url} returned {r.status_code}:\n{r.text}")
+
     def post_secret(
         self,
         title: str,

@@ -22,7 +22,7 @@ client = ClientProxy.api_proxy("https://example.com/password/api", password="sec
 client = ClientProxy.keepass_proxy("/path/to/passwords.kdbx", password="secret")
 ```
 
-Mutating operations (`create_secret`, `update_secret_fields`, `add_attachment`) require the API backend; a local KeePass proxy raises `RuntimeError` for those calls.
+Mutating operations (`create_secret`, `update_secret_fields`, `add_attachment`, `delete_attachment`) require the API backend; a local KeePass proxy raises `RuntimeError` for those calls.
 
 ## Domain types
 

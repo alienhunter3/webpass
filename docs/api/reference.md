@@ -12,6 +12,7 @@ Route handlers are documented below. Each docstring leads with the HTTP method a
         - secret_details
         - secret_update
         - secret_attachments
+        - delete_secret_attachment
         - post_secret_attachment
 
 ## Groups (`/api/group`)
