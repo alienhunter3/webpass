@@ -144,6 +144,16 @@ def handle_args():
         help="Base64-encoded attachment data (requires --name)",
     )
 
+    del_att_parser = subparsers.add_parser(
+        "delete-attachment",
+        help="Delete an attachment from an existing secret via the API.",
+    )
+    del_att_parser.add_argument("-u", "--uuid", type=str, required=True, help="UUID of the secret")
+    del_att_parser.add_argument(
+        "-i", "--file-index", type=int, required=True,
+        help="Attachment index to delete (as shown by get -u ... -c files)",
+    )
+
     subparsers.add_parser("version", help="Print the installed pywebpass package version.")
     return parser
 
@@ -284,14 +294,16 @@ def main():
         cfg['API']['cache'] = 'no'
 
     # mutating commands always use the API; never write to the local KeePass cache
-    if args.command in ("add", "update", "add-attachment"):
+    if args.command in ("add", "update", "add-attachment", "delete-attachment"):
         client = ClientProxy.api_proxy(cfg['API']['api_address'], cfg['API']['api_password'])
         if args.command == "add":
             _run_add(args, client)
         elif args.command == "update":
             _run_update(args, client)
-        else:
+        elif args.command == "add-attachment":
             _run_add_attachment(args, client)
+        else:
+            _run_delete_attachment(args, client)
         return
 
     # prepare client
@@ -468,6 +480,10 @@ def _run_add_attachment(args, client: ClientProxy):
         _check_attachment_size(len(data), "base64 input")
 
     client.add_attachment(args.uuid, BytesIO(data), file_name)
+
+
+def _run_delete_attachment(args, client: ClientProxy):
+    client.delete_attachment(args.uuid, args.file_index)
 
 
 def _run_generate(args):

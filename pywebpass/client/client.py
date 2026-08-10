@@ -37,6 +37,12 @@ class Attachment:
         """Download this attachment's binary content via the parent client."""
         return self.parent.get_file(self.index)
 
+    def delete(self):
+        """Delete this attachment via the parent client (API backend only)."""
+        if self.parent is None or self.parent._parent is None:
+            raise RuntimeError("Parent doesn't exist. Cannot delete attached files.")
+        self.parent._parent.delete_attachment(self.parent.uuid, self.index)
+
     def short_string(self):
         """Return a short display label like ``[0]filename.txt``."""
         return f"[{self.index}]{self.file_name}"
@@ -410,4 +416,18 @@ class ClientProxy:
         if not isinstance(self.client, ApiClient):
             raise RuntimeError("Adding attachments requires the API backend; local KeePass cache is read-only.")
         self.client.post_secret_attachment(resolve_uuid(uuid), file_object, file_name)
+
+    def delete_attachment(
+        self,
+        uuid: Union[UUID, int, bytes, str],
+        index: int,
+    ) -> None:
+        """Delete an attachment from a secret via the API backend.
+
+        Raises:
+            RuntimeError: If the backend is not :class:`ApiClient`.
+        """
+        if not isinstance(self.client, ApiClient):
+            raise RuntimeError("Deleting attachments requires the API backend; local KeePass cache is read-only.")
+        self.client.delete_secret_attachment(resolve_uuid(uuid), index)
 

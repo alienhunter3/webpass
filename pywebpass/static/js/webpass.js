@@ -421,15 +421,31 @@ function setSecretDisplay(){
    var attHeader = document.createElement("h3");
    attHeader.innerHTML = 'Attachments:';
    var attList = document.createElement("ul");
-   for (i in current_secret.attachments){
+   for (var i = 0; i < current_secret.attachments.length; i++){
+     var att = current_secret.attachments[i];
+     var aid = att.id;
      var newLi = document.createElement("li");
      var liAnchor = document.createElement("a");
-     liAnchor.innerText = current_secret.attachments[i].file_name;
-     liAnchor.addEventListener('click', function(){
-        downloadAttachment(current_secret.attachments[i].id);
-     });
+     liAnchor.innerText = att.file_name;
      liAnchor.href = "#";
+     liAnchor.addEventListener('click', (function(attachmentId){
+        return function(e){
+           e.preventDefault();
+           downloadAttachment(attachmentId);
+        };
+     })(aid));
      newLi.append(liAnchor);
+     newLi.append(document.createTextNode(" "));
+     var delAnchor = document.createElement("a");
+     delAnchor.innerText = "[delete]";
+     delAnchor.href = "#";
+     delAnchor.addEventListener('click', (function(attachmentId, fileName){
+        return function(e){
+           e.preventDefault();
+           deleteAttachment(attachmentId, fileName);
+        };
+     })(aid, att.file_name));
+     newLi.append(delAnchor);
      attList.appendChild(newLi);
    }
     elem.appendChild(tab);
@@ -472,10 +488,12 @@ function downloadAttachment(aid) {
     if (!loggedIn()){
         alert("Not logged in!");
         logOut();
+        return;
     }
 
     if (current_secret === null){
-        alert("No secret currently selected.")
+        alert("No secret currently selected.");
+        return;
     }
 
   request = new XMLHttpRequest();
@@ -497,6 +515,50 @@ function downloadAttachment(aid) {
       anchor.click();
     }
   };
+}
+
+function deleteAttachment(aid, fileName) {
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+        return;
+    }
+
+    if (current_secret === null){
+        alert("No secret currently selected.");
+        return;
+    }
+
+    var label = fileName || ("attachment " + aid);
+    if (!confirm("Delete attachment '" + label + "'?")){
+        return;
+    }
+
+    forefront('loading');
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4)  {
+            if (this.status == 200){
+                secretClick(current_secret.uuid);
+            }
+            else if(this.status == 404){
+                alert('Attachment not found: ' + this.responseText);
+                secretClick(current_secret.uuid);
+            }
+            else if(this.status == 401){
+                alert('Authentication failed. Incorrect password.');
+                logOut();
+            }
+            else{
+                alert('Unknown error deleting attachment.');
+                secretClick(current_secret.uuid);
+            }
+        }
+    };
+
+    XMLReq.open("DELETE", api_secret + '/' + current_secret.uuid + "/attachment/" + aid, true);
+    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
+    XMLReq.send(null);
 }
 
 function downloadDBFile(){

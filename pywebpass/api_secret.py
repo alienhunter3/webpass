@@ -267,6 +267,38 @@ def secret_attachments(uuid: str, attachment_id: int):
     return make_response({'msg': 'attachment not found'}, 404)
 
 
+@api_secret.route(api_prefix + '/<string:uuid>/attachment/<int:attachment_id>', methods=['DELETE'])
+def delete_secret_attachment(uuid: str, attachment_id: int):
+    """``DELETE /api/secret/<uuid>/attachment/<attachment_id>`` — delete an attachment.
+
+    Response:
+        ``200`` with ``{"msg": "ok. attachment deleted."}``.
+        ``400`` for a malformed UUID; ``404`` if secret or attachment is missing.
+    """
+    try:
+        uuid_obj = UUID(uuid)
+    except ValueError as e:
+        return make_response({'msg': 'incorrectly formatted uuid value'}, 400)
+    secret = g.db.find_entries_by_uuid(uuid_obj, first=True)
+    if secret is None:
+        return make_response({'msg': 'secret not found'}, 404)
+
+    attachment = None
+    for a in secret.attachments:
+        if a.id == attachment_id:
+            attachment = a
+            break
+    if attachment is None:
+        return make_response({'msg': 'attachment not found'}, 404)
+
+    try:
+        g.db.delete_binary(attachment_id)
+        g.db.save()
+        return make_response({'msg': 'ok. attachment deleted.'}, 200)
+    except Exception:
+        return make_response({'msg': "Couldn't save changes to database due to unknown error."}, 500)
+
+
 @api_secret.route(api_prefix + '/<string:uuid>/attachment', methods=['POST'])
 def post_secret_attachment(uuid: str):
     """``POST /api/secret/<uuid>/attachment`` — upload an attachment.
