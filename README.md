@@ -10,6 +10,8 @@ pip install .
 pip install -e .
 ```
 
+That install does not include uWSGI. Production behind nginx needs uWSGI built into the virtualenv, a `wsgi.py` beside `webpass.ini`, and the nginx `HTTPS` / `REQUEST_SCHEME` params. `python3 -m venv --clear` deletes those files and the instance folder. See [docs/deployment.md](docs/deployment.md).
+
 ## Run locally
 
 ```bash
