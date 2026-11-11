@@ -56,6 +56,10 @@ def create_app(test_config=None, *, instance_path=None, require_database=None):
 
     app.config.from_mapping(
         DATABASE=os.path.join(app.instance_path, 'passwords.kdbx'),
+        # Web UI only. Seconds. The browser tab clears the master password
+        # after either limit. Override in instance config.py.
+        UI_IDLE_TIMEOUT=15 * 60,
+        UI_ABSOLUTE_TIMEOUT=8 * 60 * 60,
     )
 
     app.config['LOG_LEVEL'] = logging.WARNING

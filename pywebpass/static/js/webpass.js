@@ -1,62 +1,227 @@
+// Master password and decrypted entries live in this tab's memory only.
+// They are not written to localStorage or sessionStorage. Idle and absolute
+// timers below clear them and return to the login screen.
 var pw = "";
 var groups = [];
+var entries = [];
 var secrets = [];
 var current_secret = null;
-var db_details = null;
-const api_base = window.location + 'api';
-const api_group = api_base + '/group';
-const api_secret = api_base + '/secret';
-const api_db = api_base + '/file';
-const divIds = ['login', 'groups', 'secret', 'secret_list', 'loading', 'edit', 'database', 'upload', 'attachment'];
+var database_details = null;
+var currentGroupId = null;
+var viewMode = "login";
+var sessionStartedAt = 0;
+var lastActivityAt = 0;
+var expiryTimer = null;
+var IDLE_MS = 15 * 60 * 1000;
+var ABSOLUTE_MS = 8 * 60 * 60 * 1000;
+const api_base = window.location + "api";
+const api_group = api_base + "/group";
+const api_secret = api_base + "/secret";
+const api_db = api_base + "/file";
+const divIds = ["login", "groups", "secret", "secret_list", "loading", "edit", "database", "upload", "attachment"];
+
 function loggedIn(){
-    if (pw == ""){
-        return false;
-    }
-    else{
-        return true;
+    return pw !== "";
+}
+
+function basicAuth(password){
+    try {
+        return "Basic " + btoa("empty:" + password);
+    } catch (e) {
+        return null;
     }
 }
+
 function hideAll(){
     for (let i of divIds) {
         var elem = document.getElementById(i);
         elem.hidden = true;
     }
 }
+
+function showPanel(id){
+    hideAll();
+    document.getElementById(id).hidden = false;
+}
+
 function forefront(id){
     if(!loggedIn()){
         alert("Not logged in.");
         return;
     }
-    hideAll();
-    var elem = document.getElementById(id);
-    elem.hidden = false;
+    showPanel(id);
 }
 
 function clearGroupList(){
-    var elem = document.getElementById('group_ul');
-    elem.innerHTML = "";
+    document.getElementById("group_ul").textContent = "";
 }
 
 function clearSecretList(){
-    var elem = document.getElementById('secret_table');
-    elem.innerHTML = "<tr><th>Title</th><th>Username</th><th>Password</th></tr>";
+    var elem = document.getElementById("secret_table");
+    elem.textContent = "";
+    var header = document.createElement("tr");
+    ["Title", "Username", "Password"].forEach(function(label){
+        var th = document.createElement("th");
+        th.textContent = label;
+        header.appendChild(th);
+    });
+    elem.appendChild(header);
 }
 
 function clearSecret(){
-    var elem = document.getElementById('secret_content');
-    elem.innerHTML = "";
+    document.getElementById("secret_content").textContent = "";
+}
+
+function blankField(id){
+    var el = document.getElementById(id);
+    if (el && "value" in el){
+        el.value = "";
+    }
+}
+
+function clearDecryptedSecret(){
+    current_secret = null;
+    clearSecret();
+    ["edit_title_field", "edit_username_field", "edit_pw_field", "edit_url_field", "edit_notes_field", "edit_uuid_field"].forEach(blankField);
+}
+
+function wipeSecretsFromDom(){
+    ["pw_field", "db_upload_pw", "edit_title_field", "edit_username_field", "edit_pw_field", "edit_url_field", "edit_notes_field", "edit_uuid_field", "search_input", "attachment_input"].forEach(blankField);
+    var attName = document.getElementById("attachment_secret_name");
+    if (attName){
+        attName.textContent = "";
+    }
+    var details = document.getElementById("database_details");
+    if (details){
+        details.textContent = "";
+    }
+    clearSecretList();
+    clearGroupList();
+    clearSecret();
+}
+
+function clearAppStorage(){
+    [window.localStorage, window.sessionStorage].forEach(function(store){
+        if (!store){
+            return;
+        }
+        try {
+            var keys = [];
+            for (var i = 0; i < store.length; i++){
+                keys.push(store.key(i));
+            }
+            keys.forEach(function(name){
+                name = name || "";
+                if (name.indexOf("webpass") === 0 || name.indexOf("pywebpass") === 0){
+                    store.removeItem(name);
+                }
+            });
+        } catch (e) {}
+    });
+}
+
+function clearClipboard(){
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText("").catch(function(){});
+        }
+    } catch (e) {}
+}
+
+function formatDuration(ms){
+    if (ms < 60000){
+        var seconds = Math.max(1, Math.round(ms / 1000));
+        return seconds + (seconds === 1 ? " second" : " seconds");
+    }
+    var minutes = Math.round(ms / 60000);
+    if (minutes >= 60 && minutes % 60 === 0){
+        var hours = minutes / 60;
+        return hours + (hours === 1 ? " hour" : " hours");
+    }
+    return minutes + (minutes === 1 ? " minute" : " minutes");
+}
+
+function readSessionLimits(){
+    var idleSec = parseInt(document.body.getAttribute("data-idle-timeout"), 10);
+    var absSec = parseInt(document.body.getAttribute("data-absolute-timeout"), 10);
+    if (!isNaN(idleSec) && idleSec > 0){
+        IDLE_MS = idleSec * 1000;
+    }
+    if (!isNaN(absSec) && absSec > 0){
+        ABSOLUTE_MS = absSec * 1000;
+    }
+    var policy = document.getElementById("session_policy");
+    if (policy){
+        policy.textContent = "The master password stays in this tab's memory only. It is cleared after "
+            + formatDuration(IDLE_MS) + " of inactivity, or "
+            + formatDuration(ABSOLUTE_MS) + " after login.";
+    }
+}
+
+function noteActivity(){
+    if (!loggedIn()){
+        return;
+    }
+    lastActivityAt = Date.now();
+}
+
+function checkSessionExpiry(){
+    if (!loggedIn()){
+        return;
+    }
+    var now = Date.now();
+    if (sessionStartedAt && now - sessionStartedAt >= ABSOLUTE_MS){
+        endSession("The maximum session length was reached. Log in again.");
+        return;
+    }
+    if (lastActivityAt && now - lastActivityAt >= IDLE_MS){
+        endSession("You were signed out after a period of inactivity.");
+    }
+}
+
+function startSessionClock(){
+    var now = Date.now();
+    sessionStartedAt = now;
+    lastActivityAt = now;
+    if (expiryTimer){
+        clearInterval(expiryTimer);
+    }
+    expiryTimer = setInterval(checkSessionExpiry, 1000);
+}
+
+function endSession(message){
+    logOut();
+    var note = document.getElementById("login_notice");
+    if (note){
+        note.textContent = message || "";
+    }
+}
+
+function groupDepth(group){
+    var parts = (group.path || "").split("/");
+    var depth = 0;
+    for (var i = 0; i < parts.length; i++){
+        if (parts[i]){
+            depth++;
+        }
+    }
+    return depth;
 }
 
 function setGroupList(){
     clearGroupList();
-    var elem = document.getElementById('group_ul');
+    var elem = document.getElementById("group_ul");
     for (let g of groups){
         var li = document.createElement("li");
         var anch = document.createElement("a");
         anch.dataset.uuid = g.uuid;
-        anch.href = '#';
-        anch.innerHTML = g.name;
-        anch.addEventListener("click", function(){groupClick(g.uuid);});
+        anch.href = "#";
+        anch.textContent = g.name || "(unnamed group)";
+        anch.style.paddingLeft = (groupDepth(g) * 12) + "px";
+        anch.addEventListener("click", function(event){
+            event.preventDefault();
+            groupClick(g.uuid);
+        });
         li.appendChild(anch);
         elem.appendChild(li);
     }
@@ -64,24 +229,29 @@ function setGroupList(){
 
 function setSecretList(){
     clearSecretList();
-    var elem = document.getElementById('secret_table');
+    var elem = document.getElementById("secret_table");
     for (let s of secrets){
         var tr = document.createElement("tr");
         var td_title = document.createElement("td");
         var td_username = document.createElement("td");
         var td_pass = document.createElement("td");
-        td_username.innerHTML = s.username;
+        td_username.textContent = s.username || "";
         var anch = document.createElement("a");
         anch.dataset.uuid = s.uuid;
-        anch.href = '#';
-        anch.innerHTML = s.title;
-        anch.addEventListener("click", function(){secretClick(s.uuid);});
+        anch.href = "#";
+        anch.textContent = s.title || "";
+        anch.addEventListener("click", function(event){
+            event.preventDefault();
+            secretClick(s.uuid);
+        });
         td_title.appendChild(anch);
         var pw_anch = document.createElement("a");
-        pw_anch.dataset.uuid = s.uuid;
-        pw_anch.href = '#';
-        pw_anch.innerHTML = '<b>COPY</b>';
-        pw_anch.addEventListener("click", function(){secretPassClip(s.uuid);});
+        pw_anch.href = "#";
+        pw_anch.textContent = "COPY";
+        pw_anch.addEventListener("click", function(event){
+            event.preventDefault();
+            secretPassClip(s.uuid);
+        });
         td_pass.appendChild(pw_anch);
         tr.appendChild(td_title);
         tr.appendChild(td_username);
@@ -91,256 +261,359 @@ function setSecretList(){
 }
 
 function logOut(){
+    if (expiryTimer){
+        clearInterval(expiryTimer);
+        expiryTimer = null;
+    }
+    pw = "";
     groups = [];
+    entries = [];
     secrets = [];
     current_secret = null;
-    pw = '';
-    db_details = null;
-    clearSecretList();
-    clearGroupList();
-    clearSecret();
-    forefront('login');
-    var upass = document.getElementById("db_upload_pw");
-    upass.value = "";
+    database_details = null;
+    currentGroupId = null;
+    viewMode = "login";
+    sessionStartedAt = 0;
+    lastActivityAt = 0;
+    wipeSecretsFromDom();
+    clearAppStorage();
+    clearClipboard();
+    var note = document.getElementById("login_notice");
+    if (note){
+        note.textContent = "";
+    }
+    showPanel("login");
+}
+
+function applyAuthFailure(keepSession, onErr){
+    if (keepSession){
+        if (onErr){
+            onErr(401);
+        }
+        return;
+    }
+    endSession("Authentication failed. Log in again.");
+}
+
+function loadTree(password, onOk, onErr, keepSession){
+    var header = basicAuth(password);
+    if (header === null){
+        if (onErr){
+            onErr(0);
+        }
+        else {
+            alert("That password cannot be sent by this browser (non-Latin-1 characters).");
+        }
+        return;
+    }
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState != 4){
+            return;
+        }
+        if (this.status == 200){
+            var data = JSON.parse(this.responseText);
+            groups = data.data.groups || [];
+            entries = data.data.entries || [];
+            setGroupList();
+            if (onOk){
+                onOk();
+            }
+        }
+        else if (this.status == 401){
+            applyAuthFailure(keepSession, onErr);
+        }
+        else if (onErr){
+            onErr(this.status);
+        }
+        else {
+            alert("Could not load the password database.");
+        }
+    };
+    XMLReq.open("GET", api_group + "/tree", true);
+    XMLReq.setRequestHeader("Authorization", header);
+    XMLReq.send(null);
 }
 
 function logIn(){
-    var pwf = document.getElementById('pw_field');
-    pw = pwf.value;
+    var pwf = document.getElementById("pw_field");
+    var attempted = pwf.value;
     pwf.value = "";
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                groups = data.data;
-                setGroupList();
-                forefront('groups');
-            }
-            else if(this.status == 401){
-                alert('Login failed. Incorrect password.');
-            }
-            else{
-                alert('Login request failed.');
-            }
+    var note = document.getElementById("login_notice");
+    if (note){
+        note.textContent = "";
+    }
+    showPanel("loading");
+    loadTree(attempted, function(){
+        pw = attempted;
+        attempted = "";
+        viewMode = "groups";
+        currentGroupId = null;
+        startSessionClock();
+        showPanel("groups");
+    }, function(status){
+        attempted = "";
+        pw = "";
+        showPanel("login");
+        if (status == 401){
+            alert("Login failed. Incorrect password.");
         }
-    };
-
-    XMLReq.open("GET", api_group, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    forefront('loading');
-    XMLReq.send(null);
+        else if (status == 0){
+            alert("That password cannot be sent by this browser (non-Latin-1 characters).");
+        }
+        else {
+            alert("Login request failed.");
+        }
+    }, true);
 }
 
-function getGroupSecrets(uuid){
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                secrets = data.data;
-                setSecretList();
-                forefront('secret_list');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error retrieving group secrets.');
-            }
+function showGroupEntries(uuid){
+    currentGroupId = uuid;
+    viewMode = "group";
+    clearDecryptedSecret();
+    secrets = [];
+    for (var i = 0; i < entries.length; i++){
+        if (entries[i].group === uuid){
+            secrets.push(entries[i]);
         }
-    };
-
-    XMLReq.open("GET", api_group + '/' + uuid + '/secrets', true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+    }
+    setSecretList();
+    showPanel("secret_list");
 }
 
-function createSecretClick(){
+function showAllEntries(){
+    currentGroupId = null;
+    viewMode = "all";
+    clearDecryptedSecret();
+    secrets = entries.slice();
+    setSecretList();
+    showPanel("secret_list");
+}
+
+function showGroups(){
     if (!loggedIn()){
-        alert("Not logged in!");
-        logOut();
+        alert("Not logged in.");
+        return;
     }
-    var egf = document.getElementById('edit_group_field');
-    egf.innerHTML = "<option disabled selected value> -- select a group -- </option>"
-    for (i in groups){
-        gName = groups[i].name;
-        gUuid = groups[i].uuid;
-        var tmpGroup = document.createElement("option");
-        tmpGroup.value = gUuid;
-        tmpGroup.innerHTML = gName;
-        egf.appendChild(tmpGroup);
-    }
-
-    var resetFields = ["edit_title_field", "edit_username_field", "edit_pw_field", "edit_url_field", "edit_notes_field"];
-    for (i in resetFields){
-        var tmp = document.getElementById(resetFields[i]);
-        tmp.value = "";
-    }
-    var editButton = document.getElementById("edit_button");
-    editButton.removeAttribute("onclick");
-    editButton.onclick = createSecretPost;
-    forefront('edit');
+    viewMode = "groups";
+    currentGroupId = null;
+    clearDecryptedSecret();
+    setGroupList();
+    showPanel("groups");
 }
 
-function updateSecretClick(){
+function refreshTreeClick(){
     if (!loggedIn()){
-        alert("Not logged in!");
-        logOut();
+        alert("Not logged in.");
+        return;
     }
-
-    if (current_secret === null){
-        alert("No secret currently selected.")
-    }
-
-    var egf = document.getElementById('edit_group_field');
-    egf.innerHTML = "<option disabled selected value> -- select a group -- </option>"
-
-    document.getElementById("edit_title_field").value = current_secret.name
-    document.getElementById("edit_notes_field").value = current_secret.notes
-    document.getElementById("edit_pw_field").value = current_secret.password
-    document.getElementById("edit_url_field").value = current_secret.url
-    document.getElementById("edit_username_field").value = current_secret.username
-    document.getElementById("edit_uuid_field").value = current_secret.uuid
-
-    var editButton = document.getElementById("edit_button");
-    editButton.removeAttribute("onclick");
-    editButton.onclick = updateSecretPut;
-    forefront('edit');
-}
-
-function updateSecretPut(){
-    var title = document.getElementById('edit_title_field').value;
-    var username = document.getElementById('edit_username_field').value;
-    var password = document.getElementById('edit_pw_field').value;
-    var url = document.getElementById('edit_url_field').value;
-    var notes = document.getElementById('edit_notes_field').value;
-    var uuid = document.getElementById('edit_uuid_field').value;
-    var data = {'title': title, 'username': username, 'password': password, 'url': url, 'notes': notes};
-    var body = JSON.stringify(data);
-
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                secretUuid = data.secret;
-                getSecret(secretUuid);
-            }
-            else if(this.status == 400){
-                alert('Could not update secret because of invalid secret values.');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error updating secret.');
-            }
+    var previousMode = viewMode;
+    var previousGroup = currentGroupId;
+    showPanel("loading");
+    loadTree(pw, function(){
+        if (previousMode === "group" && previousGroup){
+            showGroupEntries(previousGroup);
         }
-    };
-
-    XMLReq.open("PUT", api_secret + '/' + uuid , true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
-    XMLReq.send(body);
-
-}
-
-function createSecretPost(){
-    var title = document.getElementById('edit_title_field').value;
-    var username = document.getElementById('edit_username_field').value;
-    var password = document.getElementById('edit_pw_field').value;
-    var url = document.getElementById('edit_url_field').value;
-    var notes = document.getElementById('edit_notes_field').value;
-    var group = document.getElementById('edit_group_field').value;
-    var data = {'title': title, 'username': username, 'password': password, 'url': url, 'notes': notes, 'group': group};
-    var body = JSON.stringify(data);
-
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 201){
-                var data = JSON.parse(this.responseText);
-                secretUuid = data.secret;
-                getSecret(secretUuid);
-            }
-            else if(this.status == 400){
-                alert('Could not create new secret because of invalid secret values.');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error creating secret.');
-            }
+        else if (previousMode === "all"){
+            showAllEntries();
         }
-    };
-
-    XMLReq.open("POST", api_secret , true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
-    XMLReq.send(body);
-
+        else if (previousMode === "search"){
+            showPanel("secret_list");
+        }
+        else if (previousMode === "secret" && current_secret){
+            showPanel("secret");
+        }
+        else {
+            clearDecryptedSecret();
+            blankField("db_upload_pw");
+            viewMode = "groups";
+            showPanel("groups");
+        }
+    }, function(){
+        alert("Could not reload the database.");
+        if (previousMode === "secret" && current_secret){
+            showPanel("secret");
+        }
+        else if (previousMode === "group" || previousMode === "all" || previousMode === "search"){
+            showPanel("secret_list");
+        }
+        else {
+            showPanel("groups");
+        }
+    });
 }
 
 function groupClick(uuid){
     if (!loggedIn()){
         alert("Not logged in!");
         logOut();
+        return;
     }
-    else{
-        forefront('loading');
-        clearSecretList();
-        getGroupSecrets(uuid);
+    showGroupEntries(uuid);
+}
+
+function entriesForSelect(){
+    var egf = document.getElementById("edit_group_field");
+    egf.textContent = "";
+    var placeholder = document.createElement("option");
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    placeholder.value = "";
+    placeholder.textContent = " -- select a group -- ";
+    egf.appendChild(placeholder);
+    for (var i = 0; i < groups.length; i++){
+        var tmpGroup = document.createElement("option");
+        tmpGroup.value = groups[i].uuid;
+        tmpGroup.textContent = groups[i].name || "(unnamed group)";
+        egf.appendChild(tmpGroup);
     }
+}
+
+function createSecretClick(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+        return;
+    }
+    clearDecryptedSecret();
+    entriesForSelect();
+    ["edit_title_field", "edit_username_field", "edit_pw_field", "edit_url_field", "edit_notes_field"].forEach(blankField);
+    var editButton = document.getElementById("edit_button");
+    editButton.onclick = createSecretPost;
+    viewMode = "edit";
+    forefront("edit");
+}
+
+function updateSecretClick(){
+    if (!loggedIn()){
+        alert("Not logged in!");
+        logOut();
+        return;
+    }
+    if (current_secret === null){
+        alert("No secret currently selected.");
+        return;
+    }
+    entriesForSelect();
+    document.getElementById("edit_title_field").value = current_secret.name || "";
+    document.getElementById("edit_notes_field").value = current_secret.notes || "";
+    document.getElementById("edit_pw_field").value = current_secret.password || "";
+    document.getElementById("edit_url_field").value = current_secret.url || "";
+    document.getElementById("edit_username_field").value = current_secret.username || "";
+    document.getElementById("edit_uuid_field").value = current_secret.uuid || "";
+    var editButton = document.getElementById("edit_button");
+    editButton.onclick = updateSecretPut;
+    viewMode = "edit";
+    forefront("edit");
+}
+
+function authRequest(method, url, body, onDone){
+    var header = basicAuth(pw);
+    if (header === null){
+        endSession("The saved password can no longer be sent. Log in again.");
+        return;
+    }
+    var XMLReq = new XMLHttpRequest();
+    XMLReq.onreadystatechange = function() {
+        if (this.readyState == 4){
+            if (this.status == 401){
+                endSession("Authentication failed. Log in again.");
+                return;
+            }
+            onDone(this);
+        }
+    };
+    XMLReq.open(method, url, true);
+    XMLReq.setRequestHeader("Authorization", header);
+    if (body !== null && body !== undefined){
+        XMLReq.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+        XMLReq.send(body);
+    }
+    else {
+        XMLReq.send(null);
+    }
+}
+
+function updateSecretPut(){
+    var data = {
+        title: document.getElementById("edit_title_field").value,
+        username: document.getElementById("edit_username_field").value,
+        password: document.getElementById("edit_pw_field").value,
+        url: document.getElementById("edit_url_field").value,
+        notes: document.getElementById("edit_notes_field").value
+    };
+    var uuid = document.getElementById("edit_uuid_field").value;
+    authRequest("PUT", api_secret + "/" + uuid, JSON.stringify(data), function(XMLReq){
+        if (XMLReq.status == 200){
+            var payload = JSON.parse(XMLReq.responseText);
+            loadTree(pw, function(){
+                getSecret(payload.secret);
+            });
+        }
+        else if (XMLReq.status == 400){
+            alert("Could not update secret because of invalid secret values.");
+        }
+        else {
+            alert("Error updating secret.");
+        }
+    });
+}
+
+function createSecretPost(){
+    var data = {
+        title: document.getElementById("edit_title_field").value,
+        username: document.getElementById("edit_username_field").value,
+        password: document.getElementById("edit_pw_field").value,
+        url: document.getElementById("edit_url_field").value,
+        notes: document.getElementById("edit_notes_field").value,
+        group: document.getElementById("edit_group_field").value
+    };
+    authRequest("POST", api_secret, JSON.stringify(data), function(XMLReq){
+        if (XMLReq.status == 201){
+            var payload = JSON.parse(XMLReq.responseText);
+            loadTree(pw, function(){
+                getSecret(payload.secret);
+            });
+        }
+        else if (XMLReq.status == 400){
+            alert("Could not create new secret because of invalid secret values.");
+        }
+        else {
+            alert("Error creating secret.");
+        }
+    });
 }
 
 function secretPassClip(uuid){
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                navigator.clipboard.writeText(data.data.password);
-                alert('Copied password to clipboard.');
-            }
-            else if(this.status == 401){
-                alert('Login failed. Incorrect password.');
-            }
-            else{
-                alert('Login request failed.');
-            }
+    authRequest("GET", api_secret + "/" + uuid, null, function(XMLReq){
+        if (XMLReq.status == 200){
+            var data = JSON.parse(XMLReq.responseText);
+            navigator.clipboard.writeText(data.data.password);
+            alert("Copied password to clipboard.");
         }
-    };
-
-    XMLReq.open("GET", api_secret + '/' + uuid, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+        else {
+            alert("Could not copy the password.");
+        }
+    });
 }
 
 function getSearchSecrets(needle){
-    var XMLReq = new XMLHttpRequest();
     var params = "search=" + encodeURIComponent(needle);
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                secrets = data.data;
-                setSecretList();
-                forefront('secret_list');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error retrieving search secrets.');
-            }
+    authRequest("GET", api_secret + "?" + params, null, function(XMLReq){
+        if (XMLReq.status == 200){
+            var data = JSON.parse(XMLReq.responseText);
+            secrets = data.data;
+            viewMode = "search";
+            currentGroupId = null;
+            clearDecryptedSecret();
+            setSecretList();
+            showPanel("secret_list");
         }
-    };
-
-    XMLReq.open("GET", api_secret+'?'+params, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+        else {
+            alert("Error retrieving search secrets.");
+            showPanel("groups");
+        }
+    });
 }
 
 function searchSecretClick(){
@@ -350,35 +623,11 @@ function searchSecretClick(){
     }
     var searchBar = document.getElementById("search_input");
     var needle = searchBar.value;
-    searchBar.value = '';
+    searchBar.value = "";
     secrets = [];
-    forefront('loading');
+    showPanel("loading");
     clearSecretList();
     getSearchSecrets(needle);
-}
-
-function getAllSecrets(){
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                secrets = data.data;
-                setSecretList();
-                forefront('secret_list');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error retrieving search secrets.');
-            }
-        }
-    };
-
-    XMLReq.open("GET", api_secret, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
 }
 
 function allSecretClick(){
@@ -386,99 +635,98 @@ function allSecretClick(){
         alert("Not logged in.");
         return;
     }
-    secrets = [];
-    forefront('loading');
-    clearSecretList();
-    getAllSecrets();
+    showAllEntries();
+}
+
+function textOf(value){
+    if (value === null || value === undefined){
+        return "";
+    }
+    if (typeof value === "object"){
+        return JSON.stringify(value);
+    }
+    return String(value);
 }
 
 function setSecretDisplay(){
     clearSecret();
-    var elem = document.getElementById('secret_content');
+    var elem = document.getElementById("secret_content");
     var tab = document.createElement("table");
-    for (pair of Object.entries(current_secret)){
+    for (let pair of Object.entries(current_secret)){
         if (pair[0] == "attachments"){
             continue;
         }
         var row = document.createElement("tr");
         var field = document.createElement("td");
-        field.innerHTML = pair[0];
+        field.textContent = textOf(pair[0]);
         row.appendChild(field);
+        var value = document.createElement("td");
         if (pair[0] == "notes"){
-            var value = document.createElement("td");
             var pre = document.createElement("pre");
-            pre.innerText = pair[1];
+            pre.textContent = textOf(pair[1]);
             value.appendChild(pre);
         }
-        else{
-            var value = document.createElement("td");
-            value.innerHTML = pair[1];
+        else {
+            value.textContent = textOf(pair[1]);
         }
         row.appendChild(value);
         tab.appendChild(row);
     }
 
-   var attHeader = document.createElement("h3");
-   attHeader.innerHTML = 'Attachments:';
-   var attList = document.createElement("ul");
-   for (var i = 0; i < current_secret.attachments.length; i++){
-     var att = current_secret.attachments[i];
-     var aid = att.id;
-     var newLi = document.createElement("li");
-     var liAnchor = document.createElement("a");
-     liAnchor.innerText = att.file_name;
-     liAnchor.href = "#";
-     liAnchor.addEventListener('click', (function(attachmentId){
-        return function(e){
-           e.preventDefault();
-           downloadAttachment(attachmentId);
-        };
-     })(aid));
-     newLi.append(liAnchor);
-     newLi.append(document.createTextNode(" "));
-     var delAnchor = document.createElement("a");
-     delAnchor.innerText = "[delete]";
-     delAnchor.href = "#";
-     delAnchor.addEventListener('click', (function(attachmentId, fileName){
-        return function(e){
-           e.preventDefault();
-           deleteAttachment(attachmentId, fileName);
-        };
-     })(aid, att.file_name));
-     newLi.append(delAnchor);
-     attList.appendChild(newLi);
-   }
+    var attHeader = document.createElement("h3");
+    attHeader.textContent = "Attachments:";
+    var attList = document.createElement("ul");
+    var attachments = current_secret.attachments || [];
+    for (var i = 0; i < attachments.length; i++){
+        var att = attachments[i];
+        var aid = att.id;
+        var newLi = document.createElement("li");
+        var liAnchor = document.createElement("a");
+        liAnchor.textContent = att.file_name || "";
+        liAnchor.href = "#";
+        liAnchor.addEventListener("click", (function(attachmentId){
+            return function(e){
+                e.preventDefault();
+                downloadAttachment(attachmentId);
+            };
+        })(aid));
+        newLi.append(liAnchor);
+        newLi.append(document.createTextNode(" "));
+        var delAnchor = document.createElement("a");
+        delAnchor.textContent = "[delete]";
+        delAnchor.href = "#";
+        delAnchor.addEventListener("click", (function(attachmentId, fileName){
+            return function(e){
+                e.preventDefault();
+                deleteAttachment(attachmentId, fileName);
+            };
+        })(aid, att.file_name));
+        newLi.append(delAnchor);
+        attList.appendChild(newLi);
+    }
     elem.appendChild(tab);
     elem.appendChild(attHeader);
     elem.appendChild(attList);
 }
 
 function getSecret(uuid){
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                current_secret = data.data;
-                setSecretDisplay();
-                forefront('secret');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error retrieving search secrets.');
-            }
+    showPanel("loading");
+    authRequest("GET", api_secret + "/" + uuid, null, function(XMLReq){
+        if (XMLReq.status == 200){
+            var data = JSON.parse(XMLReq.responseText);
+            current_secret = data.data;
+            viewMode = "secret";
+            setSecretDisplay();
+            showPanel("secret");
         }
-    };
-
-    XMLReq.open("GET", api_secret + '/' + uuid, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+        else {
+            alert("Error retrieving secret.");
+            showPanel("groups");
+        }
+    });
 }
 
 function secretClick(uuid){
-    forefront('loading');
     current_secret = null;
     clearSecret();
     getSecret(uuid);
@@ -490,31 +738,38 @@ function downloadAttachment(aid) {
         logOut();
         return;
     }
-
     if (current_secret === null){
         alert("No secret currently selected.");
         return;
     }
-
-  request = new XMLHttpRequest();
-  request.responseType = "blob";
-  request.open("GET", api_secret + '/' + current_secret.uuid + "/attachment/" + aid , true);
-  request.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-  request.send();
-
-  request.onreadystatechange = function () {
-    if (this.readyState == 4 && this.status == 200) {
-      var cdh = this.getResponseHeader('content-disposition');
-      var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-      var matches = filenameRegex.exec(cdh);
-      const attURL = window.URL.createObjectURL(this.response);
-      const anchor = document.createElement("a");
-      anchor.href = attURL;
-      anchor.download = matches[1];
-      document.body.appendChild(anchor);
-      anchor.click();
+    var header = basicAuth(pw);
+    if (header === null){
+        endSession("The saved password can no longer be sent. Log in again.");
+        return;
     }
-  };
+    var request = new XMLHttpRequest();
+    request.responseType = "blob";
+    request.open("GET", api_secret + "/" + current_secret.uuid + "/attachment/" + aid, true);
+    request.setRequestHeader("Authorization", header);
+    request.send();
+    request.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 401){
+            endSession("Authentication failed. Log in again.");
+            return;
+        }
+        if (this.readyState == 4 && this.status == 200) {
+            var cdh = this.getResponseHeader("content-disposition");
+            var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            var matches = filenameRegex.exec(cdh);
+            const attURL = window.URL.createObjectURL(this.response);
+            const anchor = document.createElement("a");
+            anchor.href = attURL;
+            anchor.download = matches ? matches[1].replace(/^["']|["']$/g, "") : "attachment";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+        }
+    };
 }
 
 function deleteAttachment(aid, fileName) {
@@ -523,81 +778,77 @@ function deleteAttachment(aid, fileName) {
         logOut();
         return;
     }
-
     if (current_secret === null){
         alert("No secret currently selected.");
         return;
     }
-
     var label = fileName || ("attachment " + aid);
     if (!confirm("Delete attachment '" + label + "'?")){
         return;
     }
-
-    forefront('loading');
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                secretClick(current_secret.uuid);
-            }
-            else if(this.status == 404){
-                alert('Attachment not found: ' + this.responseText);
-                secretClick(current_secret.uuid);
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-                logOut();
-            }
-            else{
-                alert('Unknown error deleting attachment.');
-                secretClick(current_secret.uuid);
-            }
+    var secretUuid = current_secret.uuid;
+    showPanel("loading");
+    authRequest("DELETE", api_secret + "/" + secretUuid + "/attachment/" + aid, null, function(XMLReq){
+        if (XMLReq.status == 200){
+            getSecret(secretUuid);
         }
-    };
-
-    XMLReq.open("DELETE", api_secret + '/' + current_secret.uuid + "/attachment/" + aid, true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+        else if (XMLReq.status == 404){
+            alert("Attachment not found: " + XMLReq.responseText);
+            getSecret(secretUuid);
+        }
+        else {
+            alert("Unknown error deleting attachment.");
+            getSecret(secretUuid);
+        }
+    });
 }
 
 function downloadDBFile(){
     if (!loggedIn()){
         alert("Not logged in!");
         logOut();
+        return;
     }
-
-  request = new XMLHttpRequest();
-  request.responseType = "blob";
-  request.open("GET", api_db , true);
-  request.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-  request.send();
-
-  request.onreadystatechange = function () {
-    if (this.readyState == 4 && this.status == 200) {
-      var cdh = this.getResponseHeader('content-disposition');
-      var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-      var matches = filenameRegex.exec(cdh);
-      const attURL = window.URL.createObjectURL(this.response);
-      const anchor = document.createElement("a");
-      anchor.href = attURL;
-      anchor.download = matches[1];
-      document.body.appendChild(anchor);
-      anchor.click();
+    var header = basicAuth(pw);
+    if (header === null){
+        endSession("The saved password can no longer be sent. Log in again.");
+        return;
     }
-  };
+    var request = new XMLHttpRequest();
+    request.responseType = "blob";
+    request.open("GET", api_db, true);
+    request.setRequestHeader("Authorization", header);
+    request.send();
+    request.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 401){
+            endSession("Authentication failed. Log in again.");
+            return;
+        }
+        if (this.readyState == 4 && this.status == 200) {
+            var cdh = this.getResponseHeader("content-disposition");
+            var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            var matches = filenameRegex.exec(cdh);
+            const attURL = window.URL.createObjectURL(this.response);
+            const anchor = document.createElement("a");
+            anchor.href = attURL;
+            anchor.download = matches ? matches[1].replace(/^["']|["']$/g, "") : "passwords.kdbx";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+        }
+    };
 }
 
 function setDatabaseDisplay(){
     var tab = document.getElementById("database_details");
-    tab.innerHTML = "";
-    for (pair of Object.entries(database_details)){
+    tab.textContent = "";
+    for (let pair of Object.entries(database_details)){
         var row = document.createElement("tr");
         var field = document.createElement("td");
-        field.innerHTML = pair[0];
+        field.textContent = textOf(pair[0]);
         row.appendChild(field);
         var value = document.createElement("td");
-        value.innerHTML = pair[1];
+        value.textContent = textOf(pair[1]);
         row.appendChild(value);
         tab.appendChild(row);
     }
@@ -605,8 +856,9 @@ function setDatabaseDisplay(){
     var field = document.createElement("td");
     var downAnchor = document.createElement("a");
     downAnchor.href = "#";
-    downAnchor.innerHTML = "Download DB";
-    downAnchor.addEventListener('click', function(){
+    downAnchor.textContent = "Download DB";
+    downAnchor.addEventListener("click", function(event){
+        event.preventDefault();
         downloadDBFile();
     });
     field.appendChild(downAnchor);
@@ -614,8 +866,9 @@ function setDatabaseDisplay(){
     var value = document.createElement("td");
     var upAnchor = document.createElement("a");
     upAnchor.href = "#";
-    upAnchor.innerHTML ="Upload New DB";
-    upAnchor.addEventListener('click', function(){
+    upAnchor.textContent = "Upload New DB";
+    upAnchor.addEventListener("click", function(event){
+        event.preventDefault();
         showDatabaseUploadForm();
     });
     value.appendChild(upAnchor);
@@ -624,101 +877,125 @@ function setDatabaseDisplay(){
 }
 
 function getDatabaseDetails(){
-    var XMLReq = new XMLHttpRequest();
-    XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 200){
-                var data = JSON.parse(this.responseText);
-                database_details = data.details;
-                setDatabaseDisplay();
-                forefront('database');
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-            }
-            else{
-                alert('Error retrieving database details.');
-            }
+    authRequest("GET", api_db + "/details", null, function(XMLReq){
+        if (XMLReq.status == 200){
+            var data = JSON.parse(XMLReq.responseText);
+            database_details = data.details;
+            viewMode = "database";
+            setDatabaseDisplay();
+            showPanel("database");
         }
-    };
-
-    XMLReq.open("GET", api_db + '/details', true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    XMLReq.send(null);
+        else {
+            alert("Error retrieving database details.");
+            showPanel("groups");
+        }
+    });
 }
 
 function showDatabaseClick(){
-    forefront('loading');
-    database_details = 'null';
+    if (!loggedIn()){
+        alert("Not logged in.");
+        return;
+    }
+    clearDecryptedSecret();
+    showPanel("loading");
+    database_details = null;
     getDatabaseDetails();
 }
 
 function showDatabaseUploadForm(){
-    forefront('loading');
+    if (!loggedIn()){
+        alert("Not logged in.");
+        return;
+    }
     var upForm = document.getElementById("db_upload_form");
     upForm.action = api_db;
-    var upass = document.getElementById("db_upload_pw");
-    upass.value = pw;
-    forefront('upload');
+    blankField("db_upload_pw");
+    viewMode = "upload";
+    showPanel("upload");
 }
 
 function addAttachmentClick(){
     if (!loggedIn()){
         alert("Not logged in!");
         logOut();
+        return;
     }
-
     if (current_secret === null){
-        alert("No secret currently selected.")
+        alert("No secret currently selected.");
+        return;
     }
-
-    document.getElementById("attachment_secret_name").innerHTML = current_secret.name
-
-    var attachButton = document.getElementById("attach_button");
-    attachButton.removeAttribute("onclick");
-    attachButton.onclick = addAttachmentPost;
-    forefront('attachment');
+    document.getElementById("attachment_secret_name").textContent = current_secret.name || "";
+    document.getElementById("attach_button").onclick = addAttachmentPost;
+    viewMode = "attachment";
+    forefront("attachment");
 }
 
 function addAttachmentPost(){
     if (!loggedIn()){
         alert("Not logged in!");
         logOut();
+        return;
     }
-
     if (current_secret === null){
         alert("No secret currently selected.");
+        return;
     }
-
-    forefront('loading');
-
-    var form = document.getElementById("attachment_upload_form")
+    var secretUuid = current_secret.uuid;
+    showPanel("loading");
+    var form = document.getElementById("attachment_upload_form");
     var formData = new FormData(form);
-    //formData.append("attachment", fileInput.files[0]);
-
+    var header = basicAuth(pw);
+    if (header === null){
+        endSession("The saved password can no longer be sent. Log in again.");
+        return;
+    }
     var XMLReq = new XMLHttpRequest();
     XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4)  {
-            if (this.status == 201){
-                secretClick(current_secret.uuid);
-            }
-            else if(this.status == 400){
-                alert('Could not create new secret because of invalid request:' + this.responseText);
-                secretClick(current_secret.uuid);
-            }
-            else if(this.status == 401){
-                alert('Authentication failed. Incorrect password.');
-                secretClick(current_secret.uuid);
-            }
-            else{
-                alert('Unknown Error creating secret.');
-                secretClick(current_secret.uuid);
-            }
+        if (this.readyState != 4){
+            return;
+        }
+        if (this.status == 401){
+            endSession("Authentication failed. Log in again.");
+            return;
+        }
+        if (this.status == 201){
+            getSecret(secretUuid);
+        }
+        else if (this.status == 400){
+            alert("Could not attach the file: " + this.responseText);
+            getSecret(secretUuid);
+        }
+        else {
+            alert("Unknown error attaching file.");
+            getSecret(secretUuid);
         }
     };
-
-    XMLReq.open("POST", api_secret + '/' + current_secret.uuid + "/attachment", true);
-    XMLReq.setRequestHeader ("Authorization", "Basic " + btoa('empty' + ":" + pw));
-    //XMLReq.setRequestHeader("Content-Type", "multipart/form-data;");
+    XMLReq.open("POST", api_secret + "/" + secretUuid + "/attachment", true);
+    XMLReq.setRequestHeader("Authorization", header);
     XMLReq.send(formData);
+}
+
+function initUi(){
+    readSessionLimits();
+    ["click", "keydown", "input", "mousemove", "touchstart"].forEach(function(name){
+        document.addEventListener(name, noteActivity, true);
+    });
+    document.addEventListener("visibilitychange", checkSessionExpiry);
+    var upload = document.getElementById("db_upload_form");
+    if (upload){
+        upload.addEventListener("submit", function(){
+            var field = document.getElementById("db_upload_pw");
+            if (field){
+                field.value = pw;
+            }
+        });
+    }
+}
+
+if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initUi);
+}
+else {
+    initUi();
 }

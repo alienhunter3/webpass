@@ -7,7 +7,7 @@ chmod-socket = 664
 need-app = true
 
 ## For Apache try:
-# http-socket = :8080 # or whatever port
+# http-socket = 127.0.0.1:8080
 
 uid = www-data
 gid = www-data

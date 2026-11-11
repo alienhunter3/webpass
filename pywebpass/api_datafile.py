@@ -15,34 +15,25 @@ from os.path import dirname, join, isdir, splitext, exists
 from shutil import copyfile
 import datetime
 
+from .request_guard import install_secret_guards, request_master_password
+
 api_datafile = Blueprint('api_datafile', __name__)
 api_prefix = '/file'
+install_secret_guards(api_datafile)
 
 
 @api_datafile.before_request
 def before_request_func():
-    if 'password' in request.form:
-        pw = request.form['password']
-        try:
-            g.db = PyKeePass(current_app.config['DATABASE'], password=pw)
-            g.pw = pw
-        except CredentialsError as e:
-            return make_response({'msg': 'login invalid'}, 401)
-        except Exception as e:
-            current_app.logger.error(f"Unexpected error:\n{format_exc()}")
-            return make_response({'msg': 'unexpected server error'}, 500)
-    elif request.authorization is None:
+    pw = request_master_password()
+    if pw is None:
         return make_response({'msg': 'login with http basic auth'}, 401)
-    else:
-        pw = request.authorization.password
-        try:
-            g.db = PyKeePass(current_app.config['DATABASE'], password=pw)
-            g.pw = pw
-        except CredentialsError as e:
-            return make_response({'msg': 'login invalid'}, 401)
-        except Exception as e:
-            current_app.logger.error(f"Unexpected error:\n{format_exc()}")
-            return make_response({'msg': 'unexpected server error'}, 500)
+    try:
+        g.db = PyKeePass(current_app.config['DATABASE'], password=pw)
+    except CredentialsError as e:
+        return make_response({'msg': 'login invalid'}, 401)
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error:\n{format_exc()}")
+        return make_response({'msg': 'unexpected server error'}, 500)
 
 
 @api_datafile.route(api_prefix, methods=['GET'])
@@ -84,7 +75,7 @@ def update_file():
         return make_response({'msg': 'Wrong file type uploaded'}, '400')
     file.save(tmp_db)
     try:
-        tdb = PyKeePass(tmp_db, password=g.pw)
+        tdb = PyKeePass(tmp_db, password=request_master_password())
         group_tmp = tdb.groups
     except CredentialsError as e:
         return make_response({'msg': 'DB has wrong password'}, '400')

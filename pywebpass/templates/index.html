@@ -8,17 +8,19 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="{{ url_for('static', filename='js/webpass.js') }}"></script>
 </head>
-<body>
+<body data-idle-timeout="{{ idle_timeout }}" data-absolute-timeout="{{ absolute_timeout }}">
     <div id="center">
         <div id="menu">
-            <a href="#" onclick="forefront('groups');">groups</a> |
-            <a href="#" onclick="allSecretClick()">all secrets</a> | <a href="#" onclick="logOut()" >logout</a> |
-            <a href="#" onclick="createSecretClick()" >new secret</a> |
-            <a href="#" onclick="showDatabaseClick()">database file</a>
+            <a href="#" onclick="showGroups(); return false;">groups</a> |
+            <a href="#" onclick="allSecretClick(); return false;">all secrets</a> |
+            <a href="#" onclick="refreshTreeClick(); return false;">refresh</a> |
+            <a href="#" onclick="logOut(); return false;">logout</a> |
+            <a href="#" onclick="createSecretClick(); return false;">new secret</a> |
+            <a href="#" onclick="showDatabaseClick(); return false;">database file</a>
             <hr/>
         </div>
         <div id="search">
-            <form id="search_form" >
+            <form id="search_form" onsubmit="return false;">
 
                 <label for="search_bar"><b>Search</b></label>
                 <input id="search_input" type="text"  name="search_bar" required>
@@ -31,11 +33,13 @@
         <div id="content">
             <div id="login">
                  <h2>LOGIN</h2>
-                 <form id="login_form">
+                 <p id="login_notice"></p>
+                 <p id="session_policy"></p>
+                 <form id="login_form" onsubmit="return false;">
                       <div class="container">
 
                         <label ><b>Password</b></label>
-                        <input id="pw_field" type="password" placeholder="Enter Password" required>
+                        <input id="pw_field" type="password" placeholder="Enter Password" autocomplete="off" required>
 
                         <button onclick="logIn()" type="submit">Login</button>
                       </div>
@@ -63,7 +67,7 @@
                     </tr>
                     <tr>
                         <td><label><b>Password</b></label></td>
-                        <td><input id="edit_pw_field" type="text" value="" size="29"></td>
+                        <td><input id="edit_pw_field" type="text" value="" size="29" autocomplete="off"></td>
                     </tr>
                     <tr>
                         <td><label><b>URL</b></label></td>
@@ -112,7 +116,7 @@
                 <form method="post" enctype="multipart/form-data" id="db_upload_form">
                   Select db file upload:
                   <input type="file" name="db_upload" id="db_upload">
-                  <input type="hidden" name="password" id="db_upload_pw" value="">
+                  <input type="hidden" name="password" id="db_upload_pw" value="" autocomplete="off">
                   <input type="submit" value="Upload KeePass DB" name="submit">
                 </form>
             </div>

@@ -29,6 +29,7 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Deployment: deployment.md
+  - Security review: SECURITY_REVIEW.md
   - Client:
       - Overview: client/index.md
       - Reference: client/reference.md

@@ -21,6 +21,7 @@ Route handlers are documented below. Each docstring leads with the HTTP method a
     options:
       members:
         - all_groups
+        - group_tree
         - group_details
         - group_secrets
 

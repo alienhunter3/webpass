@@ -11,7 +11,9 @@ Run pywebpass locally for development (for example from PyCharm or with a virtua
 4. Start the Flask development server:
 
 ```bash
-flask --app pywebpass run --debug
+flask --app pywebpass run
 ```
+
+Do not pass `--debug` when the port is reachable by anyone else. The debugger can display the master password from the request. The UI keeps that password in tab memory and clears it after 15 minutes idle or 8 hours, unless `UI_IDLE_TIMEOUT` and `UI_ABSOLUTE_TIMEOUT` (seconds) are set in `instance/config.py`.
 
 The UI is available at the app root. REST endpoints live under `/api` (or under `APP_PATH` + `/api` if that environment variable is set).

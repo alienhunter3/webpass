@@ -13,10 +13,12 @@ from pykeepass.exceptions import CredentialsError
 from uuid import UUID
 from werkzeug.exceptions import BadRequest
 from .keepass import find_group
+from .request_guard import install_secret_guards
 from io import BytesIO
 
 api_secret = Blueprint('api_secret', __name__)
 api_prefix = '/secret'
+install_secret_guards(api_secret)
 
 
 @api_secret.before_request
@@ -317,8 +319,6 @@ def post_secret_attachment(uuid: str):
     if secret is None:
         return make_response({'msg': 'secret not found'}, 404)
 
-    current_app.logger.debug(f"file data: {len(request.files)} - {request.files.keys()}")
-    current_app.logger.debug(f"request body: {request.data}")
     if len(request.files) == 0:
         return make_response({'msg': 'no file data to upload'}, 400)
     if 'attachment' not in request.files:

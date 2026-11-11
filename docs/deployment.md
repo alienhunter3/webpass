@@ -46,6 +46,10 @@ location /password {
 }
 ```
 
+Terminate TLS on this virtual host. Every API call sends the KeePass master password as HTTP Basic (base64, not encryption), and the browser sends decrypted entry passwords in request and response bodies. Do not publish the uWSGI HTTP socket, and if you use `http-socket` bind it to `127.0.0.1` only. Leave Flask's debugger off (`flask run` without `--debug`).
+
+The web UI clears its in-memory password after `UI_IDLE_TIMEOUT` seconds of inactivity (default 900) or `UI_ABSOLUTE_TIMEOUT` seconds after login (default 28800). Set those in the instance `config.py` to override. Use `LOG_LEVEL = logging.INFO` or `logging.WARNING` there. If an existing config still sets `logging.DEBUG`, change it; the example used to recommend DEBUG.
+
 With Apache, unix sockets may not work; configure uWSGI with a TCP listener instead and adjust `webpass.ini` accordingly. See the [uWSGI configuration docs](https://uwsgi-docs.readthedocs.io/en/latest/Configuration.html).
 
 14. Create a static directory in the webroot for that virtual host and copy the `js` and `css` folders from the `pywebpass` package `static` directory into it.
