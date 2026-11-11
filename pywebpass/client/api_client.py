@@ -57,10 +57,18 @@ class ApiClient:
         throw_away = self.groups
 
     def search(self, needle: str) -> list:
-        """Search secrets (``GET /secret?fetch_all=true&search=...``)."""
-        r = requests.get(self.secret_url, params={'fetch_all': "true", "search": needle}, auth=self.creds, verify=self.ssl_verify)
+        """Search secrets (``POST /secret/search``).
+
+        The term is sent in the JSON body so it is not written to the URL.
+        """
+        r = requests.post(
+            self.secret_url + "/search",
+            json={"search": needle, "fetch_all": True},
+            auth=self.creds,
+            verify=self.ssl_verify,
+        )
         if r.status_code != 200:
-            raise requests.HTTPError(f"Request to {self.group_url} returned {r.status_code}")
+            raise requests.HTTPError(f"Request to {self.secret_url}/search returned {r.status_code}")
         return r.json()['data']
 
     def secret_uuid(self, uuid: Union[str, UUID]) -> dict:

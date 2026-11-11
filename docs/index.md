@@ -10,6 +10,7 @@ Self-hosted password management backed by a KeePass (`.kdbx`) database. The pack
 
 - [Getting started](getting-started.md) — local development
 - [Deployment](deployment.md) — production with uWSGI and systemd
+- [Security review](SECURITY_REVIEW.md) — credential handling, findings, and what was changed
 - [Client library](client/index.md) — Python API overview and [reference](client/reference.md)
 - [REST API](api/index.md) — auth, conventions, and [endpoint reference](api/reference.md)
 - [Examples](examples/index.md) — instance config, uWSGI, and systemd unit

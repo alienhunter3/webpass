@@ -10,8 +10,11 @@ from pykeepass import PyKeePass
 from pykeepass.exceptions import CredentialsError
 from uuid import UUID
 
+from .request_guard import install_secret_guards
+
 api_group = Blueprint('api_group', __name__)
 api_prefix = '/group'
+install_secret_guards(api_group)
 
 
 @api_group.before_request
@@ -36,6 +39,52 @@ def all_groups():
         ``200`` with ``{"msg": "ok", "data": [{"uuid", "name"}, ...]}``.
     """
     data = [{'uuid': str(x.uuid), 'name': x.name} for x in g.db.groups]
+    return make_response({'msg': 'ok', 'data': data}, 200)
+
+
+def _group_node(group):
+    parent = group.parentgroup
+    path = group.path or []
+    return {
+        'uuid': str(group.uuid),
+        'name': group.name,
+        'path': '/' + '/'.join('' if part is None else str(part) for part in path),
+        'parent': None if parent is None else str(parent.uuid),
+    }
+
+
+def _entry_node(entry):
+    group = entry.group
+    return {
+        'uuid': str(entry.uuid),
+        'title': entry.title,
+        'username': entry.username,
+        'group': None if group is None else str(group.uuid),
+    }
+
+
+@api_group.route(api_prefix + '/tree')
+def group_tree():
+    """``GET /api/group/tree`` — groups and entry summaries, without secret values.
+
+    One database open returns the navigation tree. Groups include ``uuid``,
+    ``name``, ``path``, and ``parent``. Entries include ``uuid``, ``title``,
+    ``username``, and ``group``. Passwords, notes, URLs, and custom properties
+    are omitted; ``GET /api/secret/<uuid>`` reads those for a single entry.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": {"groups": [...], "entries": [...]}}``.
+    """
+    def _group_sort_key(group):
+        path = tuple('' if part is None else str(part) for part in (group.path or []))
+        return (path, group.name or '')
+
+    groups = sorted(g.db.groups, key=_group_sort_key)
+    entries = sorted(g.db.entries, key=lambda entry: ((entry.title or ''), str(entry.uuid)))
+    data = {
+        'groups': [_group_node(group) for group in groups],
+        'entries': [_entry_node(entry) for entry in entries],
+    }
     return make_response({'msg': 'ok', 'data': data}, 200)
 
 

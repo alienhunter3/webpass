@@ -10,16 +10,18 @@ pip install .
 pip install -e .
 ```
 
+That install does not include uWSGI. Production behind nginx needs uWSGI built into the virtualenv, a `wsgi.py` beside `webpass.ini`, and the nginx `HTTPS` / `REQUEST_SCHEME` params. `python3 -m venv --clear` deletes those files and the instance folder. See [docs/deployment.md](docs/deployment.md).
+
 ## Run locally
 
 ```bash
 mkdir -p instance
 # required: instance/passwords.kdbx
-# optional: instance/config.py
-flask --app pywebpass run --debug
+# instance/config.py must set REQUIRE_HTTPS = False for this HTTP server
+flask --app pywebpass run
 ```
 
-Startup exits if `passwords.kdbx` is missing or not readable. `config.py` is optional for a local run. Production keeps both files in the virtualenv instance folder and must copy that folder when rebuilding the venv. uWSGI should set `need-app = true` so a failed app load stops the process.
+Startup exits if `passwords.kdbx` is missing or not readable. `REQUIRE_HTTPS` defaults to true, so local HTTP needs that one line in `config.py`. Production keeps the instance folder (`passwords.kdbx` and `config.py`) and must copy it when rebuilding the venv. uWSGI should set `need-app = true` so a failed app load stops the process. The nginx `location` must pass `REQUEST_SCHEME` and `HTTPS` from `uwsgi_params`.
 
 See [docs/getting-started.md](docs/getting-started.md) and [docs/deployment.md](docs/deployment.md).
 

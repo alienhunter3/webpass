@@ -3,6 +3,7 @@ import logging
 from flask import Flask
 from systemdlogging.toolbox import init_systemd_logging
 from .util import parse_bool
+from .request_guard import install_https_requirement
 from .api_group import api_group
 from .api_secret import api_secret
 from .api_datafile import api_datafile
@@ -56,6 +57,12 @@ def create_app(test_config=None, *, instance_path=None, require_database=None):
 
     app.config.from_mapping(
         DATABASE=os.path.join(app.instance_path, 'passwords.kdbx'),
+        # Web UI only. Seconds. The browser tab clears the master password
+        # after either limit. Override in instance config.py.
+        UI_IDLE_TIMEOUT=15 * 60,
+        UI_ABSOLUTE_TIMEOUT=8 * 60 * 60,
+        # Fail closed. flask run on HTTP must set this false in config.py.
+        REQUIRE_HTTPS=True,
     )
 
     app.config['LOG_LEVEL'] = logging.WARNING
@@ -104,12 +111,14 @@ def create_app(test_config=None, *, instance_path=None, require_database=None):
     if isinstance(log_level, int):
         log_level = logging.getLevelName(log_level)
     app.logger.info(
-        'pywebpass ready (instance_path=%s database=%s log_level=%s log_to_systemd=%s)',
+        'pywebpass ready (instance_path=%s database=%s log_level=%s log_to_systemd=%s require_https=%s)',
         app.instance_path,
         app.config.get('DATABASE'),
         log_level,
         app.config.get('LOG_TO_SYSTEMD'),
+        bool(app.config.get('REQUIRE_HTTPS', True)),
     )
+    install_https_requirement(app)
     if 'APP_PATH' in os.environ:
         app_prefix = os.environ.get('APP_PATH')
     else:

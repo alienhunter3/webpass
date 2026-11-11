@@ -8,6 +8,7 @@ Route handlers are documented below. Each docstring leads with the HTTP method a
     options:
       members:
         - root_secrets
+        - search_secrets
         - post_secret
         - secret_details
         - secret_update
@@ -21,6 +22,7 @@ Route handlers are documented below. Each docstring leads with the HTTP method a
     options:
       members:
         - all_groups
+        - group_tree
         - group_details
         - group_secrets
 
