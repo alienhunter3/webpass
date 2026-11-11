@@ -12,6 +12,8 @@ var viewMode = "login";
 var sessionStartedAt = 0;
 var lastActivityAt = 0;
 var expiryTimer = null;
+var sessionGeneration = 0;
+var pendingRequests = [];
 var IDLE_MS = 15 * 60 * 1000;
 var ABSOLUTE_MS = 8 * 60 * 60 * 1000;
 const api_base = window.location + "api";
@@ -158,25 +160,31 @@ function readSessionLimits(){
     }
 }
 
-function noteActivity(){
-    if (!loggedIn()){
-        return;
-    }
-    lastActivityAt = Date.now();
-}
-
 function checkSessionExpiry(){
     if (!loggedIn()){
-        return;
+        return false;
     }
     var now = Date.now();
+    // Absolute lifetime is independent of recent input. Check it before idle
+    // so a wake-up event cannot extend a session that has already run out.
     if (sessionStartedAt && now - sessionStartedAt >= ABSOLUTE_MS){
         endSession("The maximum session length was reached. Log in again.");
-        return;
+        return false;
     }
     if (lastActivityAt && now - lastActivityAt >= IDLE_MS){
         endSession("You were signed out after a period of inactivity.");
+        return false;
     }
+    return true;
+}
+
+function noteActivity(){
+    // A mousemove after sleep or a throttled background tab must not refresh
+    // lastActivityAt until expiry has been evaluated against the old timestamp.
+    if (!checkSessionExpiry()){
+        return;
+    }
+    lastActivityAt = Date.now();
 }
 
 function startSessionClock(){
@@ -260,7 +268,39 @@ function setSecretList(){
     }
 }
 
+function rememberRequest(xhr){
+    pendingRequests.push(xhr);
+    xhr.addEventListener("loadend", function(){
+        var index = pendingRequests.indexOf(xhr);
+        if (index !== -1){
+            pendingRequests.splice(index, 1);
+        }
+    });
+}
+
+function abortPendingRequests(){
+    var inflight = pendingRequests;
+    pendingRequests = [];
+    for (var i = 0; i < inflight.length; i++){
+        try {
+            inflight[i].abort();
+        } catch (e) {}
+    }
+}
+
+function responseIsCurrent(generation, allowLoggedOut){
+    if (generation !== sessionGeneration){
+        return false;
+    }
+    if (!allowLoggedOut && !loggedIn()){
+        return false;
+    }
+    return true;
+}
+
 function logOut(){
+    sessionGeneration += 1;
+    abortPendingRequests();
     if (expiryTimer){
         clearInterval(expiryTimer);
         expiryTimer = null;
@@ -306,9 +346,16 @@ function loadTree(password, onOk, onErr, keepSession){
         }
         return;
     }
+    var generation = sessionGeneration;
     var XMLReq = new XMLHttpRequest();
+    rememberRequest(XMLReq);
     XMLReq.onreadystatechange = function() {
         if (this.readyState != 4){
+            return;
+        }
+        // Login is allowed while logged out. Every other caller must still be
+        // in the same session that started the request.
+        if (!responseIsCurrent(generation, keepSession)){
             return;
         }
         if (this.status == 200){
@@ -513,15 +560,21 @@ function authRequest(method, url, body, onDone){
         endSession("The saved password can no longer be sent. Log in again.");
         return;
     }
+    var generation = sessionGeneration;
     var XMLReq = new XMLHttpRequest();
+    rememberRequest(XMLReq);
     XMLReq.onreadystatechange = function() {
-        if (this.readyState == 4){
-            if (this.status == 401){
-                endSession("Authentication failed. Log in again.");
-                return;
-            }
-            onDone(this);
+        if (this.readyState != 4){
+            return;
         }
+        if (!responseIsCurrent(generation, false)){
+            return;
+        }
+        if (this.status == 401){
+            endSession("Authentication failed. Log in again.");
+            return;
+        }
+        onDone(this);
     };
     XMLReq.open(method, url, true);
     XMLReq.setRequestHeader("Authorization", header);
@@ -747,17 +800,25 @@ function downloadAttachment(aid) {
         endSession("The saved password can no longer be sent. Log in again.");
         return;
     }
+    var generation = sessionGeneration;
     var request = new XMLHttpRequest();
+    rememberRequest(request);
     request.responseType = "blob";
     request.open("GET", api_secret + "/" + current_secret.uuid + "/attachment/" + aid, true);
     request.setRequestHeader("Authorization", header);
     request.send();
     request.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 401){
+        if (this.readyState != 4){
+            return;
+        }
+        if (!responseIsCurrent(generation, false)){
+            return;
+        }
+        if (this.status == 401){
             endSession("Authentication failed. Log in again.");
             return;
         }
-        if (this.readyState == 4 && this.status == 200) {
+        if (this.status == 200) {
             var cdh = this.getResponseHeader("content-disposition");
             var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
             var matches = filenameRegex.exec(cdh);
@@ -814,17 +875,25 @@ function downloadDBFile(){
         endSession("The saved password can no longer be sent. Log in again.");
         return;
     }
+    var generation = sessionGeneration;
     var request = new XMLHttpRequest();
+    rememberRequest(request);
     request.responseType = "blob";
     request.open("GET", api_db, true);
     request.setRequestHeader("Authorization", header);
     request.send();
     request.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 401){
+        if (this.readyState != 4){
+            return;
+        }
+        if (!responseIsCurrent(generation, false)){
+            return;
+        }
+        if (this.status == 401){
             endSession("Authentication failed. Log in again.");
             return;
         }
-        if (this.readyState == 4 && this.status == 200) {
+        if (this.status == 200) {
             var cdh = this.getResponseHeader("content-disposition");
             var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
             var matches = filenameRegex.exec(cdh);
@@ -950,9 +1019,14 @@ function addAttachmentPost(){
         endSession("The saved password can no longer be sent. Log in again.");
         return;
     }
+    var generation = sessionGeneration;
     var XMLReq = new XMLHttpRequest();
+    rememberRequest(XMLReq);
     XMLReq.onreadystatechange = function() {
         if (this.readyState != 4){
+            return;
+        }
+        if (!responseIsCurrent(generation, false)){
             return;
         }
         if (this.status == 401){
@@ -982,6 +1056,8 @@ function initUi(){
         document.addEventListener(name, noteActivity, true);
     });
     document.addEventListener("visibilitychange", checkSessionExpiry);
+    window.addEventListener("focus", checkSessionExpiry);
+    window.addEventListener("pageshow", checkSessionExpiry);
     var upload = document.getElementById("db_upload_form");
     if (upload){
         upload.addEventListener("submit", function(){
@@ -989,6 +1065,11 @@ function initUi(){
             if (field){
                 field.value = pw;
             }
+            // Form data is read after this handler returns. Clear the password
+            // on the next turn, once that read has happened.
+            setTimeout(function(){
+                blankField("db_upload_pw");
+            }, 0);
         });
     }
 }

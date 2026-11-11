@@ -167,3 +167,13 @@ def test_ui_script_does_not_store_password_or_inject_html():
     assert 'innerHTML = pair[1]' not in text
     assert 'fetch_all' not in text
     assert "/tree" in text
+
+    note = text.split("function noteActivity()", 1)[1].split("function startSessionClock", 1)[0]
+    assert note.index("checkSessionExpiry()") < note.index("lastActivityAt = Date.now()")
+    expiry = text.split("function checkSessionExpiry()", 1)[1].split("function noteActivity()", 1)[0]
+    assert expiry.index("ABSOLUTE_MS") < expiry.index("IDLE_MS")
+    assert 'window.addEventListener("focus", checkSessionExpiry)' in text
+    assert 'window.addEventListener("pageshow", checkSessionExpiry)' in text
+    assert "sessionGeneration" in text
+    assert "abortPendingRequests()" in text
+    assert "responseIsCurrent" in text
