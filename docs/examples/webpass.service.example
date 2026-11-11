@@ -9,6 +9,7 @@ Group=www-data
 WorkingDirectory=/srv/http/webpass-venv
 Environment="PATH=/srv/http/webpass-venv/bin"
 Environment=APP_PATH=/password
+# webpass.ini sets need-app, so this unit fails if the app cannot load.
 ExecStart=/srv/http/webpass-venv/bin/uwsgi --ini webpass.ini
 
 [Install]

@@ -2,6 +2,9 @@
 socket = /srv/http/webpass-venv/webpass.sock
 module = wsgi:app
 chmod-socket = 664
+# Exit if create_app() fails (for example a missing passwords.kdbx) instead of
+# staying up with no application loaded.
+need-app = true
 
 ## For Apache try:
 # http-socket = :8080 # or whatever port

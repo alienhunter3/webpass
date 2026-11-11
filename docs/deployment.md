@@ -2,6 +2,8 @@
 
 Recommended production setup with a virtualenv, uWSGI, and systemd.
 
+The instance folder holds `passwords.kdbx` and `config.py`. Copy `<venv>/var/pywebpass-instance/` aside before rebuilding the virtualenv, then copy it back. `create_app()` exits if the configured database is missing or not readable. The example uWSGI config sets `need-app = true`, so uWSGI exits when the app fails to load.
+
 1. Use [`webpass.service.example`](examples/webpass.service.example) as a guide for where the Python virtualenv should live.
 
 2. Create a new Python virtualenv in that location (matching the service file) with appropriate permissions.
@@ -21,7 +23,7 @@ source /path/to/venv/bin/activate
 pip install /path/to/cloned/repo
 ```
 
-6. Create `webpass.ini` from [`webpass.ini.example`](examples/webpass.ini.example) and place it in the virtualenv root.
+6. Create `webpass.ini` from [`webpass.ini.example`](examples/webpass.ini.example) and place it in the virtualenv root. Keep `need-app = true` so uWSGI exits when the app fails to load.
 
 7. Place `wsgi.py` in the virtualenv root.
 
@@ -29,11 +31,11 @@ pip install /path/to/cloned/repo
 
 9. Copy the unit file to `/etc/systemd/system` and run `systemctl daemon-reload`.
 
-10. Start the service once so it creates the instance folder. It will likely crash without a database; stop it afterward.
+10. Start the service once so it creates the instance folder, then stop it. With no database the process exits during startup.
 
-11. Find the instance folder under the virtualenv (typically under a `var` path for the package).
+11. The instance folder for a virtualenv install is `<venv>/var/pywebpass-instance/` (Flask's `<prefix>/var/<app name>-instance`). A checkout that is not installed into `site-packages` uses `<repo>/instance/` instead.
 
-12. Put a `config.py` and your `passwords.kdbx` file in that instance folder. See [Examples](examples/index.md).
+12. Put `passwords.kdbx` and `config.py` in that folder. See [Examples](examples/index.md). `passwords.kdbx` has to exist and be readable or startup raises `FileNotFoundError` / `PermissionError` and includes the path it checked. `config.py` holds logging settings and any other overrides. Local development can omit `config.py` and use the built-in defaults. pip leaves this directory alone only while the virtualenv itself is kept; rebuilding the venv removes it, so copy the folder out and back as described above.
 
 13. Reverse proxy with nginx, for example:
 

@@ -6,7 +6,7 @@ Run pywebpass locally for development (for example from PyCharm or with a virtua
 
 2. Optionally create `instance/config.py`. See [Examples](examples/index.md) for a template.
 
-3. Create a KeePass database named `passwords.kdbx` in the instance folder and add some entries for testing.
+3. Create a KeePass database named `passwords.kdbx` in the instance folder and add some entries for testing. Startup fails if this file is missing or not readable.
 
 4. Start the Flask development server:
 
