@@ -651,8 +651,7 @@ function secretPassClip(uuid){
 }
 
 function getSearchSecrets(needle){
-    var params = "search=" + encodeURIComponent(needle);
-    authRequest("GET", api_secret + "?" + params, null, function(XMLReq){
+    authRequest("POST", api_secret + "/search", JSON.stringify({search: needle}), function(XMLReq){
         if (XMLReq.status == 200){
             var data = JSON.parse(XMLReq.responseText);
             secrets = data.data;

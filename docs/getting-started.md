@@ -4,7 +4,7 @@ Run pywebpass locally for development (for example from PyCharm or with a virtua
 
 1. Create an `instance` folder inside the repository root.
 
-2. Optionally create `instance/config.py`. See [Examples](examples/index.md) for a template.
+2. Create `instance/config.py` with `REQUIRE_HTTPS = False`. The default is true, so a plain `flask run` otherwise answers 403 and does not open the database. Other settings are optional. See [Examples](examples/index.md).
 
 3. Create a KeePass database named `passwords.kdbx` in the instance folder and add some entries for testing. Startup fails if this file is missing or not readable.
 

@@ -42,11 +42,22 @@ pip install /path/to/cloned/repo
 ```nginx
 location /password {
     include uwsgi_params;
+    # Repeat these so a trimmed uwsgi_params file still tells the app the
+    # real scheme. $https and $scheme come from nginx's connection, not from
+    # the browser. HTTPS=on / REQUEST_SCHEME=https is what Flask sees in the
+    # WSGI environ; request.is_secure alone is not enough, because uWSGI
+    # copies a client X-Forwarded-Proto into wsgi.url_scheme first.
+    uwsgi_param HTTPS $https if_not_empty;
+    uwsgi_param REQUEST_SCHEME $scheme;
+    # Overwrite any client X-Forwarded-Proto. Do not pass the browser's value.
+    uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
     uwsgi_pass unix:/srv/http/webpass-venv/webpass.sock;
 }
 ```
 
-Terminate TLS on this virtual host. Every API call sends the KeePass master password as HTTP Basic (base64, not encryption), and the browser sends decrypted entry passwords in request and response bodies. Do not publish the uWSGI HTTP socket, and if you use `http-socket` bind it to `127.0.0.1` only. Leave Flask's debugger off (`flask run` without `--debug`).
+Terminate TLS on this virtual host. The app refuses every request (`403`, `{"msg": "HTTPS is required"}`) unless `REQUEST_SCHEME` or `HTTPS` says the connection is TLS, and it does that before opening the KeePass file. `REQUIRE_HTTPS` defaults to true. Do not publish the uWSGI HTTP socket, and if you use `http-socket` bind it to `127.0.0.1` only. Leave Flask's debugger off (`flask run` without `--debug`).
+
+Failed logins are HTTP 401 (`login with http basic auth` when the password was not sent, `login invalid` when it was wrong), which is what fail2ban matches in the nginx access log. A missing TLS connection is 403, not 401.
 
 The web UI clears its in-memory password after `UI_IDLE_TIMEOUT` seconds of inactivity (default 900) or `UI_ABSOLUTE_TIMEOUT` seconds after login (default 28800). Set those in the instance `config.py` to override. Use `LOG_LEVEL = logging.INFO` or `logging.WARNING` there. If an existing config still sets `logging.DEBUG`, change it; the example used to recommend DEBUG.
 

@@ -38,6 +38,7 @@ def _app(tmp_path, **config):
         'DATABASE': str(path),
         'LOG_TO_SYSTEMD': False,
         'TESTING': True,
+        'REQUIRE_HTTPS': False,
     }
     settings.update(config)
     app = create_app(test_config=settings, require_database=True)
@@ -135,6 +136,7 @@ def test_ui_timeout_overrides_and_invalid_values(tmp_path):
         test_config={
             'DATABASE': str(path),
             'LOG_TO_SYSTEMD': False,
+            'REQUIRE_HTTPS': False,
             'UI_IDLE_TIMEOUT': 120,
             'UI_ABSOLUTE_TIMEOUT': 'nope',
         },
@@ -148,6 +150,7 @@ def test_ui_timeout_overrides_and_invalid_values(tmp_path):
         test_config={
             'DATABASE': str(path),
             'LOG_TO_SYSTEMD': False,
+            'REQUIRE_HTTPS': False,
             'UI_IDLE_TIMEOUT': 0,
             'UI_ABSOLUTE_TIMEOUT': -8,
         },
@@ -177,3 +180,74 @@ def test_ui_script_does_not_store_password_or_inject_html():
     assert "sessionGeneration" in text
     assert "abortPendingRequests()" in text
     assert "responseIsCurrent" in text
+    assert "?search=" not in text
+    assert 'api_secret + "/search"' in text
+
+
+def test_https_fails_closed_and_ignores_spoofed_forwarded_proto(tmp_path):
+    app, _group, _entry = _app(tmp_path, REQUIRE_HTTPS=True)
+    client = app.test_client()
+
+    blocked = client.get('/api/group/tree', auth=('user', 'not-the-password'))
+    assert blocked.status_code == 403
+    assert blocked.get_json()['msg'] == 'HTTPS is required'
+    assert 'not-the-password' not in blocked.get_data(as_text=True)
+    assert client.get('/').status_code == 403
+    # uWSGI copies a client X-Forwarded-Proto into wsgi.url_scheme. nginx's
+    # REQUEST_SCHEME still says http, and that must win.
+    spoofed = client.get(
+        '/api/group/tree',
+        base_url='https://localhost',
+        headers={'X-Forwarded-Proto': 'https'},
+        environ_overrides={'REQUEST_SCHEME': 'http'},
+        auth=('user', MASTER),
+    )
+    assert spoofed.status_code == 403
+    assert ENTRY_PASSWORD not in spoofed.get_data(as_text=True)
+    assert MASTER not in spoofed.get_data(as_text=True)
+    header_only = client.get('/', headers={'X-Forwarded-Proto': 'https'})
+    assert header_only.status_code == 403
+
+    via_scheme = client.get('/api/group/tree', environ_overrides={'REQUEST_SCHEME': 'https'})
+    assert via_scheme.status_code == 401
+    via_https_flag = client.get('/api/secret', environ_overrides={'HTTPS': 'on'})
+    assert via_https_flag.status_code == 401
+    direct_tls = client.get('/api/file', base_url='https://localhost')
+    assert direct_tls.status_code == 401
+
+
+def test_failed_logins_are_401(tmp_path):
+    app, _group, _entry = _app(tmp_path)
+    client = app.test_client()
+    for path in ('/api/group/tree', '/api/secret', '/api/file', '/api/file/details'):
+        missing = client.get(path)
+        wrong = client.get(path, auth=('user', 'not-the-password'))
+        assert missing.status_code == 401, path
+        assert wrong.status_code == 401, path
+        assert 'not-the-password' not in wrong.get_data(as_text=True)
+
+
+def test_search_post_keeps_the_term_out_of_the_url(tmp_path):
+    app, _group, entry_uuid = _app(tmp_path)
+    client = app.test_client()
+    res = client.post(
+        '/api/secret/search',
+        json={'search': 'note'},
+        auth=('user', MASTER),
+    )
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert NOTE not in body
+    assert ENTRY_PASSWORD not in body
+    assert [item['uuid'] for item in res.get_json()['data']] == [entry_uuid]
+    full = client.post(
+        '/api/secret/search',
+        json={'search': 'ada', 'fetch_all': True},
+        auth=('user', MASTER),
+    )
+    assert full.status_code == 200
+    assert full.get_json()['data'][0]['password'] == ENTRY_PASSWORD
+    legacy = client.get('/api/secret?search=ada', auth=('user', MASTER))
+    assert legacy.status_code == 200
+    assert 'deprecated' in legacy.headers.get('Warning', '').lower()
+    assert 'ada' not in legacy.headers.get('Warning', '')

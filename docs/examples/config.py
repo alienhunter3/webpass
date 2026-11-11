@@ -18,3 +18,7 @@ LOG_LEVEL = logging.INFO
 # UI_IDLE_TIMEOUT = 15 * 60
 # UI_ABSOLUTE_TIMEOUT = 8 * 60 * 60
 
+# Defaults to True. Behind nginx TLS, leave it true and pass REQUEST_SCHEME
+# and HTTPS from uwsgi_params (see the deployment docs). Local HTTP only:
+# REQUIRE_HTTPS = False
+

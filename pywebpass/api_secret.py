@@ -35,68 +35,118 @@ def before_request_func():
         return make_response({'msg': 'unexpected server error'}, 500)
 
 
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in ('y', 'yes', 'true', '1')
+
+
+def _matching_secrets(entries, term):
+    if not term:
+        return list(entries)
+    found = []
+    for secret in entries:
+        if type(secret.title) is str and term in secret.title.lower():
+            found.append(secret)
+            continue
+        if type(secret.username) is str and term in secret.username.lower():
+            found.append(secret)
+            continue
+        if type(secret.notes) is str and term in secret.notes.lower():
+            found.append(secret)
+            continue
+        for attachment in secret.attachments:
+            if term in attachment.filename.lower():
+                found.append(secret)
+                break
+    return found
+
+
+def _secret_summary(secret, fetch_all):
+    if not fetch_all:
+        return {'uuid': secret.uuid, 'title': secret.title, 'username': secret.username}
+    attachments = [{'id': a.id, 'file_name': a.filename} for a in secret.attachments]
+    data = {
+        'name': secret.title,
+        'path': f"/{'/'.join(secret.path)}",
+        'uuid': secret.uuid,
+        'notes': secret.notes,
+        'attachments': attachments,
+        'username': secret.username,
+        'password': secret.password,
+        'url': secret.url,
+    }
+    for key, val in secret.custom_properties.items():
+        var = key
+        if var in data:
+            var = 'custom_' + var
+        data[var] = val
+    return data
+
+
+def _secret_list_response(entries, term, fetch_all, deprecated_get=False):
+    matched = _matching_secrets(entries, term)
+    payload = [_secret_summary(secret, fetch_all) for secret in matched]
+    response = make_response({'msg': 'ok', 'data': payload}, 200)
+    if deprecated_get:
+        # The term itself is not logged. The URL still contains it for callers
+        # that have not moved to POST.
+        current_app.logger.warning(
+            'GET /api/secret?search= is deprecated; use POST /api/secret/search'
+        )
+        response.headers['Warning'] = '299 - "GET search is deprecated; use POST /api/secret/search"'
+    return response
+
+
 @api_secret.route(api_prefix, methods=['GET'])
 def root_secrets():
-    """``GET /api/secret`` — list or search secrets.
+    """``GET /api/secret`` — list secrets.
 
     Query params:
         fetch_all: If truthy (``true``/``yes``/``1``), return full entry details
             including password, notes, url, and attachments.
-        search: Case-insensitive substring filter on title, username, notes,
-            or attachment file names.
+        search: Deprecated. Case-insensitive substring filter on title,
+            username, notes, or attachment file names. Prefer
+            ``POST /api/secret/search`` so the term is not written to the URL
+            or the proxy access log.
+
+    Response:
+        ``200`` with ``{"msg": "ok", "data": [...]}``. Without ``fetch_all``,
+        each item is ``uuid``, ``title``, ``username``. A deprecated search
+        adds a ``Warning`` header.
+    """
+    fetch_all = 'fetch_all' in request.args and _as_bool(request.args.get('fetch_all'))
+    if 'search' in request.args:
+        term = request.args.get('search').strip().lower()
+        return _secret_list_response(g.db.entries, term, fetch_all, deprecated_get=True)
+    return _secret_list_response(g.db.entries, '', fetch_all)
+
+
+@api_secret.route(api_prefix + '/search', methods=['POST'])
+def search_secrets():
+    """``POST /api/secret/search`` — search secrets.
+
+    The term is a JSON field, not a query parameter, so it stays out of
+    proxy access logs.
+
+    Request body (``application/json``):
+        search: Case-insensitive substring matched against title, username,
+            notes, and attachment file names. Empty returns every entry.
+        fetch_all: If truthy, include password, notes, url, and attachments.
 
     Response:
         ``200`` with ``{"msg": "ok", "data": [...]}``. Without ``fetch_all``,
         each item is ``uuid``, ``title``, ``username``.
     """
-    all_secrets = g.db.entries
-    fetch_all_details = False
-    secret_set = []
-    if 'fetch_all' in request.args:
-        if request.args['fetch_all'].strip().lower() in ['y', 'yes', 'true', '1']:
-            fetch_all_details = True
-    if 'search' in request.args:
-        term = request.args.get('search').strip().lower()
-        if term == '':
-            secret_set = all_secrets
-        else:
-            for s in all_secrets:
-                if type(s.title) is str and term in s.title.lower():
-                    secret_set.append(s)
-                    continue
-                if type(s.username) is str and term in s.username.lower():
-                    secret_set.append(s)
-                    continue
-                if type(s.notes) is str and term in s.notes.lower():
-                    secret_set.append(s)
-                    continue
-                for a in s.attachments:
-                    if term in a.filename.lower():
-                        secret_set.append(s)
-                        break
-    else:
-        secret_set = all_secrets
-
-    if fetch_all_details:
-        return_data = []
-        for secret in secret_set:
-            attachments = []
-            for a in secret.attachments:
-                attachments.append({'id': a.id, 'file_name': a.filename})
-            data = {'name': secret.title, 'path': f"/{'/'.join(secret.path)}", 'uuid': secret.uuid,
-                    'notes': secret.notes,
-                    'attachments': attachments, 'username': secret.username, 'password': secret.password,
-                    'url': secret.url}
-            for key in secret.custom_properties.keys():
-                var = key
-                val = secret.custom_properties[var]
-                if var in data:
-                    var = 'custom_' + var
-                data[var] = val
-            return_data.append(data)
-    else:
-        return_data = [{'uuid': x.uuid, 'title': x.title, 'username': x.username} for x in secret_set]
-    return make_response({'msg': 'ok', 'data': return_data}, 200)
+    if request.get_json(silent=True) is None and not request.is_json:
+        return make_response({'msg': 'currently only "application/json" supported'}, 400)
+    body = request.get_json(silent=True)
+    if type(body) is not dict:
+        return make_response({'msg': 'invalid JSON structure'}, 400)
+    term = str(body.get('search') or '').strip().lower()
+    return _secret_list_response(g.db.entries, term, _as_bool(body.get('fetch_all')))
 
 
 @api_secret.route(api_prefix, methods=['POST'])
